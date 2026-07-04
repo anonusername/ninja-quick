@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.2 — 2026-07-03
+
+- Fix CI test job: a fresh checkout's `chrome-sandbox` binary isn't root-owned/4755, which made
+  Electron abort rather than run unsandboxed. Set `ELECTRON_DISABLE_SANDBOX=1` for the test step
+  (safe — `test-integration.js` never opens a `BrowserWindow`, so there's no untrusted content the
+  sandbox would be protecting).
+
 ## 1.0.1 — 2026-07-03
 
 - Fix the release workflow: grant the build job `contents: write` so `electron-builder --publish

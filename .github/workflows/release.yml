@@ -17,6 +17,12 @@ jobs:
       - run: npm ci
       - run: sudo apt-get update && sudo apt-get install -y xvfb
       - run: xvfb-run --auto-servernum npm test
+        env:
+          # A fresh CI checkout's chrome-sandbox binary isn't root-owned/4755, which Electron's
+          # SUID sandbox requires — it aborts rather than run unsandboxed by default. Safe to
+          # disable here: test-integration.js never opens a BrowserWindow, so there's no untrusted
+          # renderer content for the OS sandbox to actually be protecting.
+          ELECTRON_DISABLE_SANDBOX: '1'
 
   build:
     needs: test
