@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.8 — 2026-07-04
+
+- Add a force-refresh icon directly on unloaded/empty category rows in the sidebar (not just the
+  results-view refresh button), reusing the existing `fetch-category` IPC / `refreshCategoryNow`
+  plumbing — no new IPC surface needed.
+- Fix 5 POE2 categories that were permanently stuck at 0 items no matter how many times they were
+  refreshed: `abyssal-bones`, `omens`, `liquid-emotions`, `breach-catalyst`, `unique-relics`.
+  Confirmed via live network capture that poe.ninja's real `type` for each is a historical
+  league-mechanic codename unrelated to the current slug/label (`Abyss`, `Ritual`, `Delirium`,
+  `Breach`, `UniqueSanctumRelics` respectively) — no PascalCase transform of the slug could ever
+  guess these, so `lib/ninja-api.js` now seeds them directly instead of relying on the adaptive
+  guesser. POE1's `omens`/`unique-relics` were checked too and already resolve correctly as-is.
+- Correct a `docs/api-endpoints.md` quirk: only the `exchange` endpoint family returns
+  200-with-empty for an unrecognized `type`; the `stash`/item family genuinely 404s.
+
 ## 1.0.7 — 2026-07-04
 
 - Fix `EBADENGINE` warnings from `npm ci` in CI: bumping `electron-builder` to 26 in v1.0.6 pulled

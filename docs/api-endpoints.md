@@ -24,9 +24,19 @@ game+category rather than hardcoding one shape); if you change that file, preser
    (uniques, etc. — name/icon embedded per row). `.../api/economy/exchange/current/overview?league=X&type=Y`
    serves currency-like tradeables (row has only an `id`; name/icon come from a separate top-level `items[]`
    array joined by `id`). Example: POE2 `unique-weapons` → only `stash` has data; POE2 `currency` → only
-   `exchange` has data. **Both families answer unknown `type` values with HTTP 200 and an empty `lines`
-   array — not a 404 — so a 200 status alone does not confirm you picked the right family.** You must check
-   whether `lines` is actually non-empty before treating a combo as resolved.
+   `exchange` has data. **The `exchange` family answers unknown `type` values with HTTP 200 and an empty
+   `lines` array — not a 404 — so a 200 status alone does not confirm you picked the right family.** (The
+   `stash`/item family genuinely 404s for an unrecognized `type` — confirmed directly against a
+   deliberately bogus value — so this 200-but-empty trap is `exchange`-specific, not universal.) You must
+   check whether `lines` is actually non-empty before treating a combo as resolved.
+   
+   **The `type` value itself can also be an arbitrary historical codename, not derivable from the slug
+   at all** — e.g. POE2's `omens` category (a display label) is actually served by `type=Ritual`, not
+   any PascalCase form of "omens"; `liquid-emotions` → `Delirium`, `breach-catalyst` → `Breach`,
+   `abyssal-bones` → `Abyss`, `unique-relics` → `UniqueSanctumRelics`. These are old league-mechanic
+   names poe.ninja never renamed internally even though the category's slug/label moved on. `lib/ninja-api.js`
+   seeds `resolvedCombo` with these known cases directly rather than relying on the guesser, which can
+   never produce them.
 
 3. **The `type` query value's casing/pluralization is inconsistent between the two POE games for the
    *same* category**, on the same endpoint family. Example (stash/item family): POE2 uses the plural
