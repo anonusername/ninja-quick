@@ -15,6 +15,7 @@ let cachedData = {};
 let fetching = { poe1: false, poe2: false };    // track in-progress fetches
 let categoryRefreshing = {};     // categorySlug -> true while a per-category refresh is in flight
 let refreshIntervalMs = 12 * 60 * 60 * 1000;    // default 12 hours (user-configurable)
+let zoomFactor = 1;              // UI scale (Settings) — see applyZoomFactor
 let categoryScope = null;        // set when the user clicks a category in the overview
 let displayUnit = 'Auto';        // 'Auto' | 'Chaos' | 'Divine' | 'Exalted' — manual currency override
 
@@ -32,6 +33,16 @@ let liveCategories = { poe1: [], poe2: [] }; // [{ slug, label }] — live-scrap
 // the user has already saved an explicit setting (see applyDefaultActiveLeagues).
 let activeLeagues = [];
 let activeLeaguesInitialized = false; // true once loaded from storage OR a default has been applied
+
+// Page-zoom presets (see preload.js's setZoomFactor / webFrame.setZoomFactor) — scales text,
+// layout, and icons together as one true zoom, so the UI "fits" at every level rather than
+// just growing text past its containers.
+const ZOOM_OPTIONS = [0.8, 0.9, 1, 1.1, 1.25, 1.5];
+
+function applyZoomFactor(factor) {
+  zoomFactor = factor;
+  window.ninjaApi.setZoomFactor(factor);
+}
 
 const REFRESH_INTERVAL_OPTIONS = [
   { label: '15 minutes', ms: 15 * 60 * 1000 },
@@ -381,6 +392,28 @@ function buildItemRow(item, category, query, rates) {
 // re-expanded everything, since every render rebuilt every header with a fresh `collapsed = false`.
 let categoryCollapsed = {};
 
+// Per-category price-sort state: categorySlug -> 'none' | 'desc' | 'asc'. In-memory only,
+// same lifetime as categoryCollapsed above (resets on relaunch, not persisted).
+let categorySortMode = {};
+const SORT_CYCLE = ['none', 'desc', 'asc'];
+
+function nextSortMode(mode) {
+  return SORT_CYCLE[(SORT_CYCLE.indexOf(mode || 'none') + 1) % SORT_CYCLE.length];
+}
+
+/** Sorts items by their numeric `amount` per the category's current sort mode. Items with no
+ * numeric value (amount === null) always sort last regardless of direction, since there's
+ * nothing to compare. Returns a new array — never mutates the category's cached item list. */
+function sortByAmount(items, mode) {
+  if (mode !== 'desc' && mode !== 'asc') return items;
+  return [...items].sort((a, b) => {
+    if (a.amount === null && b.amount === null) return 0;
+    if (a.amount === null) return 1;
+    if (b.amount === null) return -1;
+    return mode === 'desc' ? b.amount - a.amount : a.amount - b.amount;
+  });
+}
+
 /** Builds a collapsible category-header + items wrapper, shared by all three list surfaces
  * (search results, the fuzzy "Similar matches" fallback, and the favorites section) so their
  * collapse/refresh behavior can't drift apart between call sites. `collapseKey` is the
@@ -422,6 +455,25 @@ function buildCollapsibleSection(collapseKey, title, count, extraHeaderHtml, pop
 
 function refreshButtonHtml(category) {
   return `<button class="category-refresh" title="Refresh ${escapeHtml(formatCategoryName(category))} now">⟳</button>`;
+}
+
+function sortButtonHtml(category) {
+  const mode = categorySortMode[category] || 'none';
+  const icon = mode === 'desc' ? '▼' : mode === 'asc' ? '▲' : '⇅';
+  const label = mode === 'desc' ? 'Sorted highest first' : mode === 'asc' ? 'Sorted lowest first' : 'Sort by price';
+  return `<button class="category-sort" title="${escapeHtml(label)} — click to change">${icon}</button>`;
+}
+
+/** `onToggle` re-renders whatever's showing this category (e.g. renderResults(query)) after the
+ * sort mode changes — the button itself only owns the state cycle, not the redraw. */
+function wireSortButton(header, category, onToggle) {
+  const btn = header.querySelector('.category-sort');
+  if (!btn) return;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    categorySortMode[category] = nextSortMode(categorySortMode[category]);
+    onToggle();
+  });
 }
 
 function wireRefreshButton(header, category) {
@@ -544,6 +596,9 @@ async function selectSidebarCategory(slug) {
 
   const savedInterval = parseInt(localStorage.getItem('ninja_refresh_ms'), 10);
   if (!isNaN(savedInterval) && savedInterval > 0) refreshIntervalMs = savedInterval;
+
+  const savedZoom = parseFloat(localStorage.getItem('ninja_zoom_factor'));
+  if (!isNaN(savedZoom) && ZOOM_OPTIONS.includes(savedZoom)) applyZoomFactor(savedZoom);
 
   const savedUnit = localStorage.getItem('ninja_display_unit');
   if (savedUnit && ['Auto', 'Chaos', 'Divine', 'Exalted'].includes(savedUnit)) displayUnit = savedUnit;
@@ -677,9 +732,10 @@ function applyGameSwitch(game) {
   const label = game === 'poe1' ? 'POE 1' : 'POE 2';
   activeText.textContent = `Current: ${label}`;
 
-  // CSS accent override for the whole app
-  document.documentElement.style.setProperty('--accent', game === 'poe1' ? '#22c55e' : '#f59e0b');
-  document.documentElement.style.setProperty('--glow', game === 'poe1' ? 'rgba(34,197,94,0.4)' : 'rgba(245,158,11,0.4)');
+  // CSS accent override for the whole app — POE1 = oxblood ember, POE2 = cold steel (see
+  // styles.css's :root for why these specific colors, not arbitrary green/amber)
+  document.documentElement.style.setProperty('--accent', game === 'poe1' ? '#d2643b' : '#7fa8c9');
+  document.documentElement.style.setProperty('--glow', game === 'poe1' ? 'rgba(210,100,59,0.4)' : 'rgba(127,168,201,0.4)');
 
   // League selector dropdown
   updateLeagueSelector(game);
@@ -690,8 +746,8 @@ function applyGameSwitch(game) {
   // Divider color
   const divider = document.querySelector('.tab-divider');
   if (divider) {
-    divider.style.background = game === 'poe1' ? '#22c55e' : '#f59e0b';
-    divider.style.boxShadow = `0 0 6px ${game === 'poe1' ? 'rgba(34,197,94,0.6)' : 'rgba(245,158,11,0.6)'}`;
+    divider.style.background = game === 'poe1' ? '#d2643b' : '#7fa8c9';
+    divider.style.boxShadow = `0 0 6px ${game === 'poe1' ? 'rgba(210,100,59,0.6)' : 'rgba(127,168,201,0.6)'}`;
   }
 }
 
@@ -890,9 +946,10 @@ function renderResults(query) {
     const items = entry && Array.isArray(entry.items) ? entry.items : [];
     if (items.length === 0) continue;
 
-    const matches = items.filter((item) => item.name.toLowerCase().includes(query));
+    let matches = items.filter((item) => item.name.toLowerCase().includes(query));
     if (matches.length === 0) continue;
 
+    matches = sortByAmount(matches, categorySortMode[category]);
     totalMatches += matches.length;
 
     const limit = categoryRenderLimit[category] || RENDER_CAP;
@@ -900,9 +957,10 @@ function renderResults(query) {
       category,
       formatCategoryName(category),
       matches.length,
-      `<span class="category-updated">${escapeHtml(formatAgo(entry.fetchedAt))}</span>${refreshButtonHtml(category)}`,
+      `<span class="category-updated">${escapeHtml(formatAgo(entry.fetchedAt))}</span>${refreshButtonHtml(category)}${sortButtonHtml(category)}`,
       (itemsDiv, header) => {
         wireRefreshButton(header, category);
+        wireSortButton(header, category, () => renderResults(query));
         matches.slice(0, limit).forEach((item) => {
           itemsDiv.appendChild(buildItemRow(item, category, query, rates));
         });
@@ -976,6 +1034,27 @@ function renderSettings() {
   intervalRow.innerHTML = `<span>Background refresh interval</span>`;
   intervalRow.appendChild(intervalSelect);
   box.appendChild(intervalRow);
+
+  // UI scale — true page zoom (text + layout + icons together), not just a font-size bump
+  const zoomRow = document.createElement('label');
+  zoomRow.className = 'settings-row';
+  const zoomSelect = document.createElement('select');
+  zoomSelect.className = 'league-select';
+  for (const factor of ZOOM_OPTIONS) {
+    const el = document.createElement('option');
+    el.value = factor;
+    el.textContent = `${Math.round(factor * 100)}%`;
+    if (factor === zoomFactor) el.selected = true;
+    zoomSelect.appendChild(el);
+  }
+  zoomSelect.addEventListener('change', () => {
+    const factor = parseFloat(zoomSelect.value);
+    applyZoomFactor(factor);
+    localStorage.setItem('ninja_zoom_factor', String(factor));
+  });
+  zoomRow.innerHTML = `<span>UI scale</span>`;
+  zoomRow.appendChild(zoomSelect);
+  box.appendChild(zoomRow);
 
   // Active leagues — which game+league combos the interval above actually refreshes. Listed for
   // both games regardless of currentGame, since "active" is independent of what's on screen.

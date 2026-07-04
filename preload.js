@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 contextBridge.exposeInMainWorld('ninjaApi', {
   // Data access — cache is scoped per game+league, so getCachedData needs both.
@@ -20,6 +20,15 @@ contextBridge.exposeInMainWorld('ninjaApi', {
 
   // Open a poe.ninja URL in the system's default browser (never inside the app)
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+
+  // UI scale (Settings → font/UI size). webFrame.setZoomFactor is a true page zoom — it scales
+  // text, layout, and icons together, unlike a plain font-size change — but that alone would just
+  // clip against the fixed-size window past 100%, so this also asks main.js to resize the window
+  // itself to match (set-ui-scale IPC) — together these are what make the scale change "fit all".
+  setZoomFactor: (factor) => {
+    webFrame.setZoomFactor(factor);
+    return ipcRenderer.invoke('set-ui-scale', factor);
+  },
 
   // Register/unregister the global show/hide hotkey — the renderer decides based on its own
   // localStorage-persisted preference; main.js holds no independent settings store.
