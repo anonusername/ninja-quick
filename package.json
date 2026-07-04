@@ -1,6 +1,6 @@
 {
   "name": "ninja-quick",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Cross-platform desktop client for poe.ninja with POE 1/POE 2 switcher and unified search",
   "main": "main.js",
   "author": {
@@ -26,7 +26,7 @@
   },
   "devDependencies": {
     "electron": "^33.0.0",
-    "electron-builder": "^25.1.8",
+    "electron-builder": "^26.15.3",
     "playwright-core": "^1.61.1"
   },
   "dependencies": {

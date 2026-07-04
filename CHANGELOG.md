@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.6 — 2026-07-04
+
+- Fix CI deprecation warnings: `actions/checkout@v4` and `actions/setup-node@v4` both declared the
+  now-deprecated `node20` Actions runtime, logging a warning on every job. Bumped to
+  `actions/checkout@v7` and `actions/setup-node@v6` (both `node24`), clearing it.
+- Bump `electron-builder` from `^25.1.8` to `^26.15.3`, which drops several stale transitive
+  dependencies that were logging `npm warn deprecated` during `npm ci` (`npmlog`, `gauge`,
+  `are-we-there-yet`, `@npmcli/move-file`, and multiple duplicate `glob`/`tar` versions). A few
+  remain (`glob`/`inflight` via `@electron/asar`, `rimraf` via the Windows Squirrel installer,
+  `boolean` via Electron's own `@electron/get`) — these are transitive deps of the latest stable
+  releases of tools we already use, with no newer non-alpha version available; left as-is rather
+  than forcing risky `npm overrides`.
+
 ## 1.0.5 — 2026-07-04
 
 - Fix `v1.0.4`: `"draft": false` isn't a valid `build.publish` key in electron-builder's schema
