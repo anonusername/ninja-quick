@@ -138,13 +138,62 @@ function getFavoriteItems(game) {
 //
 // A super category groups several real categories under one sidebar box + one merged results
 // view. Adding another one later is just another entry here — `match` decides which live
-// category slugs belong to it; nothing else needs to change. "All Uniques" groups every category
-// whose slug is prefixed `unique-` (the reliable signal — live-scraped *labels* can drift from
-// their slug, e.g. poe.ninja relabeling `breach-catalyst` as "Catalysts", so slug-prefix matching
-// is what's robust here, not label text).
+// category slugs belong to it; nothing else needs to change. Optional `games: ['poe1'|'poe2']`
+// scopes an entry to only one game — needed once two games have same-named categories that
+// shouldn't group the same way (e.g. POE1's "essences" belongs in Crafting Currency, POE2's
+// "essences" doesn't belong anywhere) — omit it for an entry that's safe/desired across both.
+//
+// "All Uniques" groups every unique-gear category in both games: the `unique-` slug prefix
+// catches most of them (the reliable signal for prefix-based matches — live-scraped *labels* can
+// drift from their slug, e.g. poe.ninja relabeling `breach-catalyst` as "Catalysts"), but POE1
+// specifically has outliers this alone gets wrong: `forbidden-jewels`/`shrine-belts`/
+// `unique-tinctures` are unique-gear categories with no `unique-` prefix, and `unique-maps` DOES
+// have the prefix but poe.ninja itself files it under Maps, not equipment — confirmed via
+// research, not guessed. All three adjustments are additive/subtractive tweaks to the same one
+// rule, safe for POE2 too since none of those exact slugs exist there.
 const SUPER_CATEGORIES = [
-  { key: 'all-uniques', label: 'All Uniques', match: (slug) => slug.startsWith('unique-') },
+  {
+    key: 'all-uniques',
+    label: 'All Uniques',
+    match: (slug) =>
+      (slug.startsWith('unique-') && slug !== 'unique-maps') ||
+      ['forbidden-jewels', 'shrine-belts', 'unique-tinctures'].includes(slug),
+  },
+  {
+    key: 'all-augments',
+    label: 'All Augments',
+    games: ['poe2'],
+    match: (slug) => ['idols', 'runes', 'soul-cores'].includes(slug),
+  },
+  {
+    key: 'all-maps',
+    label: 'All Maps',
+    games: ['poe1'],
+    match: (slug) => ['maps', 'blighted-maps', 'blight-ravaged-maps', 'unique-maps', 'valdo-maps'].includes(slug),
+  },
+  {
+    key: 'all-gems',
+    label: 'All Gems',
+    games: ['poe1'],
+    match: (slug) => ['skill-gems', 'imbued-gems'].includes(slug),
+  },
+  {
+    key: 'crafting-currency',
+    label: 'Crafting Currency',
+    games: ['poe1'],
+    match: (slug) => ['fossils', 'resonators', 'essences', 'beasts', 'vials'].includes(slug),
+  },
+  {
+    key: 'all-atlas',
+    label: 'All Atlas',
+    games: ['poe1'],
+    match: (slug) => ['scarabs', 'delirium-orbs', 'invitations', 'astrolabes', 'memories', 'temples'].includes(slug),
+  },
 ];
+
+function superCategoryAppliesToGame(superCat, game) {
+  return !superCat.games || superCat.games.includes(game);
+}
 
 const SUPER_SCOPE_PREFIX = '__super:';
 
@@ -689,7 +738,7 @@ function renderCategorySidebar() {
   const renderedSuperKeys = new Set();
 
   for (const cat of cats) {
-    const superCat = SUPER_CATEGORIES.find((sc) => sc.match(cat.slug));
+    const superCat = SUPER_CATEGORIES.find((sc) => superCategoryAppliesToGame(sc, currentGame) && sc.match(cat.slug));
     if (superCat) {
       if (renderedSuperKeys.has(superCat.key)) continue; // already rendered with the group below
       renderedSuperKeys.add(superCat.key);
