@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.7 — 2026-07-04
+
+- Fix `EBADENGINE` warnings from `npm ci` in CI: bumping `electron-builder` to 26 in v1.0.6 pulled
+  in `@electron/rebuild@4.1.0` and `node-abi@4.33.0`, both requiring Node `>=22.12.0`, but the
+  workflow's `node-version` was still `20`. Bumped to `22` (current active LTS) in both jobs. This
+  was a warning, not a build failure (v1.0.6's CI run succeeded regardless), but it's now resolved
+  cleanly rather than left as noise.
+
 ## 1.0.6 — 2026-07-04
 
 - Fix CI deprecation warnings: `actions/checkout@v4` and `actions/setup-node@v4` both declared the
