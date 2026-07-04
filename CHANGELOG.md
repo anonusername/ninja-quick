@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1 — 2026-07-03
+
+- Fix the release workflow: grant the build job `contents: write` so `electron-builder --publish
+  always` can actually create the GitHub Release (the repo's default Actions token permission is
+  read-only). Also install `xvfb` explicitly before the headless test run and cache npm deps.
+
 ## 1.0.0 — 2026-07-03
 
 First cross-platform release (Windows, macOS, Linux).
