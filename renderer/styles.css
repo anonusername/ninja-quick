@@ -667,6 +667,28 @@ mark {
   accent-color: var(--accent);
 }
 
+.settings-row-column {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.settings-subrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0 6px 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.settings-subrow input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
 /* ════════ Recent searches ════════ */
 
 .recent-searches {
@@ -714,4 +736,33 @@ mark {
 
 .show-more-row:hover {
   color: var(--accent);
+}
+
+/* ── Update Toast ───────────────────────────── */
+
+.update-toast {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.update-toast button {
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  color: var(--bg-primary);
+  padding: 6px 12px;
+  font-weight: 600;
+  cursor: pointer;
 }

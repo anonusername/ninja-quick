@@ -4,6 +4,20 @@ const fs = require('fs');
 const ninjaApi = require('./lib/ninja-api');
 const { getCategories } = require('./lib/categories');
 const { discoverCategories } = require('./lib/category-discovery');
+const { autoUpdater } = require('electron-updater');
+
+// Windows taskbar grouping/notifications need a stable AppUserModelId — without it, price-alert
+// notifications can show up under a generic "Electron" identity instead of ninja-quick.
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.ninjaquick.app');
+}
+
+// A background tray app launching a second instance would just fight the first one over the
+// cache files and the global hotkey — focus the existing window instead.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
 
 // Live category list is re-scraped at most this often per game+league — categories change on a
 // league-cycle timescale (new PoE leagues add/remove economy categories every few months), not
@@ -77,32 +91,42 @@ function writeCategoriesToCache(game, leagueSlug, categories) {
 }
 
 /**
- * The category list the sidebar shows and the background fetch iterates, sourced live from
- * poe.ninja rather than the hardcoded lib/categories.js array — PoE leagues add/remove economy
- * categories every few months and a static list silently goes stale. Re-scrapes at most once per
- * CATEGORY_DISCOVERY_TTL_MS per game+league; falls back to the static list (still labeled via
- * formatCategoryName-equivalent title-casing, done renderer-side) if discovery has never
- * succeeded or poe.ninja is unreachable, so the app always has *something* to show.
- * Returns { categories: [{slug, label}], discoveredAt, isFallback }.
+ * The category list the sidebar shows and the background fetch iterates. lib/categories.js's
+ * committed, curated-from-live map is the immediate baseline — a packaged build's first launch
+ * must not block the sidebar/fetch loop on a scrape that can take ~20s and can fail — while
+ * lib/category-discovery.js's live scrape runs (blocking, if a previous discovery already exists
+ * and has gone stale) or in the background (fire-and-forget, on a true first launch) to override
+ * it once poe.ninja is confirmed reachable. Re-scrapes at most once per CATEGORY_DISCOVERY_TTL_MS
+ * per game+league. Returns { categories: [{slug, label}], discoveredAt, isFallback }.
  */
 async function getLiveCategories(gameKey, leagueSlug) {
   const cached = readCache(gameKey, leagueSlug).__categories;
   const isFresh = cached && Date.now() - cached.discoveredAt < CATEGORY_DISCOVERY_TTL_MS;
 
-  if (!isFresh) {
-    const discovered = await discoverCategories(gameKey, leagueSlug);
-    if (discovered) {
-      writeCategoriesToCache(gameKey, leagueSlug, discovered);
-      return { categories: discovered, discoveredAt: Date.now(), isFallback: false };
-    }
+  if (isFresh) return { ...cached, isFallback: false };
+
+  if (!cached) {
+    // True first launch (or the scrape has never once succeeded for this game+league) — return
+    // the committed list right away instead of making the caller wait on the scrape, and let the
+    // scrape run in the background to populate __categories for next time.
+    discoverCategories(gameKey, leagueSlug)
+      .then((discovered) => {
+        if (discovered) writeCategoriesToCache(gameKey, leagueSlug, discovered);
+      })
+      .catch((err) => console.error(`background discoverCategories(${gameKey}/${leagueSlug}) failed:`, err.message));
+
+    const fallback = getCategories(gameKey).map((slug) => ({ slug, label: null }));
+    return { categories: fallback, discoveredAt: null, isFallback: true };
   }
 
-  if (cached) return { ...cached, isFallback: false };
-
-  // Never discovered successfully (poe.ninja unreachable, scrape shape changed, etc.) — static
-  // fallback so the sidebar/fetch loop always have a category list to work with.
-  const fallback = getCategories(gameKey).map((slug) => ({ slug, label: null }));
-  return { categories: fallback, discoveredAt: null, isFallback: true };
+  // A discovery exists but has gone stale (past the TTL) — re-scrape now; a previously-successful
+  // scrape means poe.ninja is likely reachable, so blocking here is worth it for accuracy.
+  const discovered = await discoverCategories(gameKey, leagueSlug);
+  if (discovered) {
+    writeCategoriesToCache(gameKey, leagueSlug, discovered);
+    return { categories: discovered, discoveredAt: Date.now(), isFallback: false };
+  }
+  return { ...cached, isFallback: false };
 }
 
 // ── League cache (slug -> displayName, needed by the API but not present in poe.ninja URLs) ──
@@ -138,7 +162,9 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'renderer/index.html'));
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
-  if (process.argv.includes('--dev')) {
+  // Gated on !app.isPackaged (not just the --dev flag) so a stray argv flag can't open DevTools
+  // in a shipped build.
+  if (!app.isPackaged && process.argv.includes('--dev')) {
     mainWindow.webContents.openDevTools();
   }
 
@@ -201,11 +227,48 @@ function setHotkeyEnabled(enabled) {
   return hotkeyRegistered;
 }
 
+// A second launch attempt (user double-clicks the exe again) should just surface the existing
+// window instead of starting a competing process — requestSingleInstanceLock() above already
+// stopped the second process from getting this far in itself, this handles the first process's
+// side of that handoff.
+app.on('second-instance', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+});
+
+// ── Auto-update ────────────────────────────
+//
+// Only relevant for a packaged build — a dev run has no update feed to check and isPackaged
+// gating keeps `npx electron . --dev` from ever hitting the network for this. Unsigned builds:
+// this works on Windows/Linux out of the box; macOS auto-update is blocked by Gatekeeper until
+// the app is code-signed & notarized (see README's signing section) — checkForUpdates() there
+// will just fail silently, which is fine, not a bug.
+function initAutoUpdater() {
+  if (!app.isPackaged) return;
+  autoUpdater.autoDownload = true;
+  autoUpdater.on('update-downloaded', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-downloaded');
+    }
+  });
+  autoUpdater.on('error', (err) => {
+    console.error('autoUpdater error:', err.message);
+  });
+  autoUpdater.checkForUpdates().catch((err) => console.error('checkForUpdates failed:', err.message));
+}
+
+ipcMain.handle('restart-to-update', () => {
+  autoUpdater.quitAndInstall();
+});
+
 // ── Init ───────────────────────────────────
 
 app.whenReady().then(() => {
   createWindow();
   createTray();
+  initAutoUpdater();
 });
 
 app.on('before-quit', () => {

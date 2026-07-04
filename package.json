@@ -1,19 +1,87 @@
 {
   "name": "ninja-quick",
-  "version": "0.1.0",
-  "description": "Windows desktop client for poe.ninja with POE 1/POE 2 switcher and unified search",
+  "version": "1.0.0",
+  "description": "Cross-platform desktop client for poe.ninja with POE 1/POE 2 switcher and unified search",
   "main": "main.js",
+  "author": "anonusername",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anonusername/ninja-quick.git"
+  },
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
     "test": "electron test-integration.js",
-    "clean-cache": "node -e \"const fs=require('fs');const path=require('path');const d=path.join(require('os').homedir(),`AppData/Roaming/ninja-quick/.cache`);if(fs.existsSync(d))fs.rmSync(d,{recursive:true});console.log('Cache cleared:',d)\""
+    "clean-cache": "node -e \"const fs=require('fs');const path=require('path');const d=path.join(require('os').homedir(),`AppData/Roaming/ninja-quick/.cache`);if(fs.existsSync(d))fs.rmSync(d,{recursive:true});console.log('Cache cleared:',d)\"",
+    "dist:dir": "electron-builder --dir",
+    "dist": "electron-builder -mwl",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "generate-categories": "electron scripts/generate-categories.js"
   },
   "devDependencies": {
     "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
     "playwright-core": "^1.61.1"
   },
   "dependencies": {
+    "electron-updater": "^6.3.9",
     "fuse.js": "^7.4.2"
+  },
+  "build": {
+    "appId": "com.ninjaquick.app",
+    "productName": "ninja-quick",
+    "copyright": "Copyright © 2026",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**/*",
+      "renderer/**/*",
+      "assets/**/*",
+      "package.json",
+      "!scripts/**/*",
+      "!docs/**/*",
+      "!test-integration.js",
+      "!*.md"
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "anonusername",
+      "repo": "ninja-quick"
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.utilities"
+    },
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.png",
+      "category": "Utility"
+    }
   }
 }

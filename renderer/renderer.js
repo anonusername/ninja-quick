@@ -25,6 +25,14 @@ let notificationsEnabled = true;
 let settingsOpen = false;
 let liveCategories = { poe1: [], poe2: [] }; // [{ slug, label }] — live-scraped, see loadLiveCategories
 
+// activeLeagues: [{ game, leagueSlug }] — which game+league combos the background refresh timer
+// (startRefreshTimer) actually touches. Separate from currentLeague/currentGame (what's on
+// screen): viewing a league is always on-demand regardless of whether it's active. Defaults to
+// POE2 · Runes of Aldur (SC) the first time detectLeagues() resolves POE2's league list, unless
+// the user has already saved an explicit setting (see applyDefaultActiveLeagues).
+let activeLeagues = [];
+let activeLeaguesInitialized = false; // true once loaded from storage OR a default has been applied
+
 const REFRESH_INTERVAL_OPTIONS = [
   { label: '15 minutes', ms: 15 * 60 * 1000 },
   { label: '30 minutes', ms: 30 * 60 * 1000 },
@@ -91,6 +99,74 @@ function getFavoriteItems(game) {
     if (item) result.push({ item, category });
   }
   return result;
+}
+
+// ── Active Game+Leagues ─────────────────────
+//
+// Distinct from favorites/alerts (which are per-game, not per-league) — a game+league combo is
+// the unit background refresh operates on, so it's stored as a flat list of { game, leagueSlug }.
+
+/** Returns null (not []) when nothing has ever been saved, so callers can tell "user explicitly
+ * deactivated everything" apart from "never configured — apply the default". */
+function loadActiveLeaguesRaw() {
+  try {
+    const raw = localStorage.getItem('ninja_active_leagues');
+    if (raw === null) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((a) => a && a.game && a.leagueSlug) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveActiveLeagues() {
+  localStorage.setItem('ninja_active_leagues', JSON.stringify(activeLeagues));
+}
+
+function isLeagueActive(game, leagueSlug) {
+  return activeLeagues.some((a) => a.game === game && a.leagueSlug === leagueSlug);
+}
+
+function setLeagueActive(game, leagueSlug, active) {
+  if (active) {
+    if (!isLeagueActive(game, leagueSlug)) activeLeagues.push({ game, leagueSlug });
+  } else {
+    activeLeagues = activeLeagues.filter((a) => !(a.game === game && a.leagueSlug === leagueSlug));
+  }
+  saveActiveLeagues();
+}
+
+/** Called once, right after detectLeagues() resolves POE2's league list, if the user has never
+ * saved an explicit active-leagues setting. Picks the softcore temp league (not Standard/HC) —
+ * poe.ninja's economyLeagues list puts the current temp league first, which is "Runes of Aldur"
+ * as of this writing, but resolving by the `hardcore` flag rather than hardcoding a slug means
+ * this survives poe.ninja renaming/rotating leagues (see docs/api-endpoints.md). */
+function applyDefaultActiveLeagues(poe2Leagues) {
+  if (activeLeaguesInitialized || poe2Leagues.length === 0) return;
+  const defaultLeague = poe2Leagues.find((l) => !l.hardcore) || poe2Leagues[0];
+  activeLeagues = [{ game: 'poe2', leagueSlug: defaultLeague.slug }];
+  activeLeaguesInitialized = true;
+  saveActiveLeagues();
+}
+
+/** Fetch any active game+league that has no cached data yet — the background timer only fires on
+ * its interval, so a first launch needs its own priming pass. Uses getCachedData directly (not
+ * cachedData[game], which only reflects whichever league is currently on screen) since an active
+ * league and the viewed league are independent. */
+async function primeActiveLeagues() {
+  for (const { game, leagueSlug } of activeLeagues) {
+    try {
+      const existing = await window.ninjaApi.getCachedData(game, leagueSlug);
+      if (categoryEntries(existing).length > 0) continue;
+      await window.ninjaApi.startFetch(game, leagueSlug);
+    } catch (err) {
+      console.error(`primeActiveLeagues(${game}/${leagueSlug}) failed:`, err);
+    }
+    if (currentGame === game && currentLeague[game] === leagueSlug) {
+      await reloadCache(game);
+      renderForQuery(searchInput.value.trim().toLowerCase());
+    }
+  }
 }
 
 function loadAlerts(game) {
@@ -476,6 +552,14 @@ async function selectSidebarCategory(slug) {
   alerts.poe2 = loadAlerts('poe2');
   notificationsEnabled = localStorage.getItem('ninja_notifications_enabled') !== 'false';
 
+  const savedActiveLeagues = loadActiveLeaguesRaw();
+  if (savedActiveLeagues !== null) {
+    activeLeagues = savedActiveLeagues;
+    activeLeaguesInitialized = true;
+  }
+  // else: left uninitialized — applyDefaultActiveLeagues() sets it once detectLeagues() below
+  // resolves POE2's league list (defaults to POE2 · Runes of Aldur SC).
+
   // Hotkey defaults OFF — auto-enabling a global shortcut without the user opting in could
   // silently steal a keybind another app already uses. Await + reconcile: registration can fail
   // (another app already holds it), and localStorage must reflect what actually happened, not
@@ -505,7 +589,9 @@ async function selectSidebarCategory(slug) {
   // fetches. None of this blocks the initial paint above.
   loadLiveCategories('poe1').catch((err) => console.error('loadLiveCategories(poe1) error:', err));
   loadLiveCategories('poe2').catch((err) => console.error('loadLiveCategories(poe2) error:', err));
-  detectLeagues().catch(err => console.error('detectLeagues error:', err));
+  detectLeagues()
+    .then(() => primeActiveLeagues())
+    .catch(err => console.error('detectLeagues error:', err));
 
   window.ninjaApi.onFetchProgress(async (data) => {
     try {
@@ -529,7 +615,23 @@ async function selectSidebarCategory(slug) {
   updateStatus();
   startRefreshTimer();
   searchInput.focus();
+
+  if (window.ninjaApi.onUpdateDownloaded) {
+    window.ninjaApi.onUpdateDownloaded(showUpdateToast);
+  }
 })();
+
+/** A packaged build's autoUpdater downloads silently in the background; this is the only UI
+ * surface telling the user an update is ready — without it, "restart to apply" would never happen
+ * until the next natural app relaunch. */
+function showUpdateToast() {
+  if (document.querySelector('.update-toast')) return;
+  const toast = document.createElement('div');
+  toast.className = 'update-toast';
+  toast.innerHTML = `<span>Update downloaded — restart to apply</span><button>Restart</button>`;
+  toast.querySelector('button').addEventListener('click', () => window.ninjaApi.restartToUpdate());
+  document.body.appendChild(toast);
+}
 
 /** Route to the right view for the current query — the single source of truth for what
  * "empty" (overview, or the active sidebar category's full list), "too short to search" and
@@ -872,6 +974,29 @@ function renderSettings() {
   intervalRow.appendChild(intervalSelect);
   box.appendChild(intervalRow);
 
+  // Active leagues — which game+league combos the interval above actually refreshes. Listed for
+  // both games regardless of currentGame, since "active" is independent of what's on screen.
+  const activeLeaguesSection = document.createElement('div');
+  activeLeaguesSection.className = 'settings-row settings-row-column';
+  activeLeaguesSection.innerHTML = `<span>Active leagues (kept updated in the background)</span>`;
+  for (const game of ['poe2', 'poe1']) {
+    for (const league of detectedLeagues[game]) {
+      const row = document.createElement('label');
+      row.className = 'settings-subrow';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = isLeagueActive(game, league.slug);
+      checkbox.addEventListener('change', () => {
+        setLeagueActive(game, league.slug, checkbox.checked);
+        if (checkbox.checked) primeActiveLeagues().catch((err) => console.error('primeActiveLeagues failed:', err));
+      });
+      row.appendChild(checkbox);
+      row.append(` ${game.toUpperCase()} · ${league.displayName}`);
+      activeLeaguesSection.appendChild(row);
+    }
+  }
+  box.appendChild(activeLeaguesSection);
+
   // Global hotkey toggle
   const hotkeyRow = document.createElement('label');
   hotkeyRow.className = 'settings-row';
@@ -1067,6 +1192,7 @@ async function detectLeagues() {
   try {
     const poe2Leagues = await window.ninjaApi.getLeagues('poe2');
     detectedLeagues.poe2 = poe2Leagues;
+    applyDefaultActiveLeagues(poe2Leagues);
     if (poe2Leagues.length > 0) {
       const saved = localStorage.getItem('ninja_league_poe2');
       const resolved = poe2Leagues.some((l) => l.slug === saved) ? saved : poe2Leagues[0].slug;
@@ -1167,26 +1293,26 @@ function startRefreshTimer() {
 
   refreshTimer = setInterval(async () => {
     console.log('Background refresh triggered');
-    const league1 = currentLeague['poe1'];
-    const league2 = currentLeague['poe2'];
+    // Only the game+leagues the user has marked active — a POE2-only player should never trigger
+    // a POE1 fetch. POE2-first ordering preserved by sorting, matching the app-wide priority.
+    const targets = [...activeLeagues].sort((a, b) => (a.game === 'poe2' ? 0 : 1) - (b.game === 'poe2' ? 0 : 1));
+    const games = [...new Set(targets.map((t) => t.game))];
 
-    fetching.poe2 = true;
-    fetching.poe1 = true;
+    for (const game of games) fetching[game] = true;
     try {
-      if (league2) await window.ninjaApi.startFetch('poe2', league2);
-      if (league1) await window.ninjaApi.startFetch('poe1', league1);
+      for (const { game, leagueSlug } of targets) {
+        await window.ninjaApi.startFetch(game, leagueSlug);
+      }
     } catch (err) {
       // Don't let a rejected startFetch (e.g. a main-process error) skip the cache reload below —
       // whatever categories DID complete before the failure should still show up.
       console.error('Background refresh failed:', err);
     } finally {
-      fetching.poe1 = false;
-      fetching.poe2 = false;
+      for (const game of games) fetching[game] = false;
     }
 
     try {
-      await reloadCache('poe1');
-      await reloadCache('poe2');
+      for (const game of games) await reloadCache(game);
       updateStatus();
     } catch (err) {
       console.error('Background refresh cache reload failed:', err);

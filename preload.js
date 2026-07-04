@@ -31,4 +31,12 @@ contextBridge.exposeInMainWorld('ninjaApi', {
     ipcRenderer.on('fetch-progress', handler);
     return () => ipcRenderer.removeListener('fetch-progress', handler);
   },
+
+  // Auto-update — main.js downloads in the background and fires this once ready to install.
+  onUpdateDownloaded: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('update-downloaded', handler);
+    return () => ipcRenderer.removeListener('update-downloaded', handler);
+  },
+  restartToUpdate: () => ipcRenderer.invoke('restart-to-update'),
 });
