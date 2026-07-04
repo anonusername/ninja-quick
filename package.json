@@ -33,6 +33,9 @@
     "electron-updater": "^6.3.9",
     "fuse.js": "^7.4.2"
   },
+  "overrides": {
+    "lodash.isequal": "file:../../vendor/isequal-shim"
+  },
   "build": {
     "appId": "com.ninjaquick.app",
     "productName": "ninja-quick",

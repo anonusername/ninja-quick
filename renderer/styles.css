@@ -1,9 +1,95 @@
 /* ════════════════════════════════════════════
    ninja-quick — Styles
-   Color palette inspired by poe.ninja's coolgrey + emerald theme
+
+   Palette and type grounded in Path of Exile's own material world rather than a generic
+   dark-mode default: the accent system reuses the game's actual currency-gold / rarity-adjacent
+   colors instead of arbitrary greens and ambers. Ledger, not landing page — see AGENTS.md's
+   design notes if you're touching this file.
    ════════════════════════════════════════════ */
 
+@font-face {
+  font-family: 'Fraunces';
+  font-weight: 500 700;
+  font-display: swap;
+  src: url('fonts/fraunces-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('fonts/plex-sans-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/plex-mono-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-weight: 500;
+  font-display: swap;
+  src: url('fonts/plex-mono-500.woff2') format('woff2');
+}
+
+/* Theme-independent — typography, radius, and motion don't change between themes (confirmed:
+   only colors are themed). `data-theme` on <html> selects which color block below applies;
+   set/persisted by renderer.js's setTheme(). Adding a 3rd theme later is just one more block here
+   plus one more THEME_ACCENTS entry in renderer.js — no other structural change needed. */
 :root {
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  --radius: 4px;
+  --transition: 150ms ease;
+}
+
+/* "ledger" (default) — warm ink-and-parchment ground, a torchlit ledger rather than a stark
+   near-black SaaS panel; accent system grounded in Path of Exile's own material world. This
+   block's values also apply via the bare :root selector as a pre-JS fallback (see below). */
+:root,
+:root[data-theme="ledger"] {
+  --bg-primary: #14100c;
+  --bg-secondary: #1b160f;
+  --bg-tertiary: #241c14;
+  --coolgrey-600: #6b5d48;
+  --coolgrey-700: #3a2f22;
+  --coolgrey-800: #241c14;
+  --coolgrey-900: #14100c;
+
+  --text-primary: #ede1c8;
+  --text-secondary: #c4b393;
+  --text-muted: #8a7a61;
+
+  /* POE 1 — oxblood ember (Wraeclast's older, bloodier identity) */
+  --poe1-accent: #d2643b;
+  --poe1-glow: rgba(210, 100, 59, 0.4);
+
+  /* POE 2 — tempered cold steel (a colder, later era) */
+  --poe2-accent: #7fa8c9;
+  --poe2-glow: rgba(127, 168, 201, 0.4);
+
+  --accent: var(--poe1-accent); /* dynamic — set by JS per active game */
+  --glow: var(--poe1-glow);     /* dynamic — set by JS per active game */
+
+  /* Fixed semantic colors — do NOT swap with --accent; these mean the same thing regardless
+     of which game tab is active. Gold = currency/value/positive, ember = danger/negative,
+     violet = the one deliberate rarity-adjacent accent, reserved for pinned favorites only. */
+  --gold: #d4af37;
+  --gold-glow: rgba(212, 175, 55, 0.35);
+  --danger: #d2643b;
+  --danger-glow: rgba(210, 100, 59, 0.3);
+  --favorite: #a98fdb;
+  --favorite-glow: rgba(169, 143, 219, 0.3);
+}
+
+/* "classic" — the original pre-redesign palette (coolgrey + emerald/amber), colors only; keeps
+   the ledger theme's typography (Fraunces/Plex) rather than reverting fonts too. */
+:root[data-theme="classic"] {
   --bg-primary: #1a1d24;
   --bg-secondary: #232730;
   --bg-tertiary: #2c3039;
@@ -16,19 +102,23 @@
   --text-secondary: #b0b6c5;
   --text-muted: #7a8190;
 
-  /* POE 1 accent — emerald green */
   --poe1-accent: #22c55e;
   --poe1-glow: rgba(34, 197, 94, 0.4);
 
-  /* POE 2 accent — amber/orange for visual distinction */
   --poe2-accent: #f59e0b;
   --poe2-glow: rgba(245, 158, 11, 0.4);
 
-  --accent: var(--poe1-accent); /* dynamic — set by JS */
-  --glow: var(--poe1-glow);     /* dynamic — set by JS */
+  --accent: var(--poe1-accent);
+  --glow: var(--poe1-glow);
 
-  --radius: 6px;
-  --transition: 150ms ease;
+  /* Old app had no separate fixed-semantic system — value/positive was green, negative was red,
+     and favorite-active just followed whichever game accent was active. */
+  --gold: #22c55e;
+  --gold-glow: rgba(34, 197, 94, 0.1);
+  --danger: #ef4444;
+  --danger-glow: rgba(239, 68, 68, 0.1);
+  --favorite: var(--accent);
+  --favorite-glow: var(--glow);
 }
 
 * {
@@ -40,7 +130,7 @@
 body {
   display: flex;
   flex-direction: column;
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-body);
   background: var(--bg-primary);
   color: var(--text-primary);
   height: 100vh;
@@ -60,9 +150,11 @@ body {
 }
 
 .game-tab {
-  padding: 8px 16px;
+  padding: 8px 18px;
+  font-family: var(--font-display);
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: 0.03em;
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
@@ -79,20 +171,20 @@ body {
   border-color: var(--coolgrey-600);
 }
 
-/* Active tab — POE 1 (emerald) */
+/* Active tab — POE 1 (oxblood ember) */
 .game-tab.active[data-game="poe1"] {
   background: var(--bg-tertiary);
-  color: #fff;
+  color: var(--text-primary);
   border-color: var(--poe1-accent);
-  box-shadow: 0 0 12px var(--poe1-glow), inset 0 0 8px rgba(34, 197, 94, 0.15);
+  box-shadow: 0 0 12px var(--poe1-glow), inset 0 0 8px rgba(210, 100, 59, 0.15);
 }
 
-/* Active tab — POE 2 (amber) */
+/* Active tab — POE 2 (cold steel) */
 .game-tab.active[data-game="poe2"] {
   background: var(--bg-tertiary);
-  color: #fff;
+  color: var(--text-primary);
   border-color: var(--poe2-accent);
-  box-shadow: 0 0 12px var(--poe2-glow), inset 0 0 8px rgba(245, 158, 11, 0.15);
+  box-shadow: 0 0 12px var(--poe2-glow), inset 0 0 8px rgba(127, 168, 201, 0.15);
 }
 
 /* Rounded corners for edges */
@@ -131,7 +223,7 @@ body {
   font-weight: 600;
   color: var(--accent);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.08em;
 }
 
 .league-badge {
@@ -165,6 +257,9 @@ body {
   gap: 8px;
 }
 
+/* A "rune-slot" rather than a generic search box — inset like a carved socket, lighting up
+   gold (the universal action color) rather than the per-game accent, since search itself
+   isn't a POE1/POE2-specific action. */
 #search-input {
   flex: 1;
   padding: 10px 14px;
@@ -174,7 +269,8 @@ body {
   border-radius: var(--radius);
   color: var(--text-primary);
   outline: none;
-  transition: border-color var(--transition);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.45);
+  transition: border-color var(--transition), box-shadow var(--transition);
 }
 
 #search-input::placeholder {
@@ -182,8 +278,8 @@ body {
 }
 
 #search-input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 6px var(--glow);
+  border-color: var(--gold);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.45), 0 0 8px var(--gold-glow);
 }
 
 .refresh-btn {
@@ -273,6 +369,7 @@ body {
 
 .sidebar-item-count {
   flex-shrink: 0;
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-muted);
 }
@@ -311,12 +408,13 @@ body {
   padding: 8px 16px;
   cursor: pointer;
   user-select: none;
-  background: var(--bg-secondary);
+  background: transparent;
+  border-bottom: 1px solid var(--coolgrey-700);
   transition: background var(--transition);
 }
 
 .category-header:hover {
-  background: var(--coolgrey-700);
+  background: var(--bg-secondary);
 }
 
 .category-chevron {
@@ -330,10 +428,12 @@ body {
 }
 
 .category-name {
+  font-family: var(--font-display);
   font-size: 13px;
   font-weight: 600;
+  letter-spacing: 0.04em;
   color: var(--text-secondary);
-  text-transform: capitalize;
+  text-transform: uppercase;
 }
 
 .category-updated {
@@ -369,8 +469,28 @@ body {
   pointer-events: none;
 }
 
+.category-sort {
+  flex-shrink: 0;
+  margin-left: 4px;
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color var(--transition), background var(--transition);
+}
+
+.category-sort:hover {
+  color: var(--gold);
+  background: var(--coolgrey-700);
+}
+
 .category-count {
   margin-left: auto;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-muted);
 }
@@ -383,25 +503,33 @@ body {
   display: none;
 }
 
-/* Individual item row */
+/* Individual item row — a miniature tooltip card: a left hairline in the active game's accent
+   (reusing PoE's own item-tooltip border convention as functional UI), overridden to violet
+   for a pinned favorite — the one deliberate rarity-adjacent accent in this app, used only here. */
 .item-row {
   display: flex;
   align-items: center;
-  padding: 6px 12px;
-  border-radius: var(--radius);
+  padding: 6px 12px 6px 10px;
+  border-left: 2px solid transparent;
+  border-radius: 0 var(--radius) var(--radius) 0;
   gap: 8px;
-  transition: background var(--transition);
+  transition: background var(--transition), border-color var(--transition);
   cursor: default;
   overflow: hidden;
 }
 
-.item-row:hover,
-.item-row.focused {
+.item-row:hover {
   background: var(--bg-tertiary);
+  border-left-color: var(--accent);
+}
+
+.item-row:has(.item-favorite.active) {
+  border-left-color: var(--favorite);
 }
 
 .item-row.focused {
-  outline: 1px solid var(--accent);
+  background: var(--bg-tertiary);
+  outline: 1px solid var(--gold);
   outline-offset: -1px;
 }
 
@@ -420,28 +548,30 @@ body {
 
 .item-value {
   flex-shrink: 0;
+  font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: 600;
-  color: var(--accent);
+  font-weight: 500;
+  color: var(--gold);
   white-space: nowrap;
 }
 
 .item-change {
   flex-shrink: 0;
+  font-family: var(--font-mono);
   font-size: 11px;
   padding: 1px 6px;
   border-radius: 4px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .item-change.positive {
-  color: #22c55e;
-  background: rgba(34, 197, 94, 0.1);
+  color: var(--gold);
+  background: var(--gold-glow);
 }
 
 .item-change.negative {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+  background: var(--danger-glow);
 }
 
 .sparkline {
@@ -450,11 +580,11 @@ body {
 }
 
 .sparkline.positive {
-  color: #22c55e;
+  color: var(--gold);
 }
 
 .sparkline.negative {
-  color: #ef4444;
+  color: var(--danger);
 }
 
 .item-copy {
@@ -476,7 +606,7 @@ body {
 }
 
 .item-copy.copied {
-  color: #22c55e;
+  color: var(--gold);
 }
 
 .item-favorite,
@@ -500,11 +630,11 @@ body {
 }
 
 .item-favorite.active {
-  color: var(--accent);
+  color: var(--favorite);
 }
 
 .item-alert.active {
-  color: #f59e0b;
+  color: var(--gold);
 }
 
 /* No results */
@@ -539,11 +669,18 @@ body {
   to { transform: rotate(360deg); }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .category-refresh.spinning,
+  .spinner {
+    animation: none;
+  }
+}
+
 /* ════════ Highlight matched text ════════ */
 
 mark {
-  background: var(--accent);
-  color: #000;
+  background: var(--gold);
+  color: var(--bg-primary);
   padding: 0 2px;
   border-radius: 2px;
 }
@@ -626,8 +763,10 @@ mark {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 15px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   color: var(--text-primary);
   margin-bottom: 16px;
 }
@@ -646,6 +785,43 @@ mark {
 .settings-close:hover {
   color: var(--accent);
   background: var(--coolgrey-700);
+}
+
+.settings-reset-heading {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px solid var(--coolgrey-700);
+}
+
+.settings-reset-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius: var(--radius);
+  border: 1px solid var(--coolgrey-600);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
+}
+
+.settings-reset-btn:hover {
+  background: var(--coolgrey-700);
+  color: var(--text-primary);
+}
+
+.settings-reset-btn.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.settings-reset-btn.danger:hover {
+  background: var(--danger-glow);
 }
 
 .settings-row {

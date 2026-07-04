@@ -145,10 +145,15 @@ function resolveDisplayName(gameKey, leagueSlug) {
 
 // ── Main window ────────────────────────────
 
+// Base content size at 100% UI scale — also used by the set-ui-scale IPC handler below so the
+// window itself grows/shrinks with the zoom factor instead of just clipping scaled-up content.
+const BASE_WINDOW_WIDTH = 720;
+const BASE_WINDOW_HEIGHT = 720;
+
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 720,
-    height: 720,
+    width: BASE_WINDOW_WIDTH,
+    height: BASE_WINDOW_HEIGHT,
     minWidth: 560,
     minHeight: 500,
     titleBarStyle: 'default',
@@ -349,6 +354,29 @@ ipcMain.handle('open-external', (_event, url) => {
   if (typeof url === 'string' && /^https:\/\/poe\.ninja\//.test(url)) {
     shell.openExternal(url);
   }
+});
+
+// Companion to the renderer's webFrame.setZoomFactor (preload.js) — a page zoom alone scales
+// content but not the window, so anything past 100% would just clip against the fixed 720x720
+// frame. Resizing the window's content area by the same factor is what actually makes "change
+// scale" mean "fit all" rather than "scale and clip."
+ipcMain.handle('set-ui-scale', (event, factor) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || typeof factor !== 'number' || factor <= 0) return null;
+  win.setContentSize(Math.round(BASE_WINDOW_WIDTH * factor), Math.round(BASE_WINDOW_HEIGHT * factor));
+  return win.getContentSize();
+});
+
+// Settings → "Clear cache". Reuses CACHE_DIR/ensureCacheDir (the package.json `clean-cache` script
+// duplicates this path standalone since it runs outside Electron with no `app` access — this is
+// the one place the running app itself can delete its own cache).
+ipcMain.handle('clear-cache', () => {
+  if (fs.existsSync(CACHE_DIR)) {
+    for (const file of fs.readdirSync(CACHE_DIR)) {
+      fs.rmSync(path.join(CACHE_DIR, file), { force: true });
+    }
+  }
+  ensureCacheDir();
 });
 
 // The renderer owns all preference persistence (localStorage) — it tells main.js what to
