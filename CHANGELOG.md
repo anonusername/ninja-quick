@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.0.9 — 2026-07-04
+
+- **Visual redesign**: replace the arbitrary emerald/amber theme with a palette grounded in Path
+  of Exile's own material world — gold/ember/steel/violet semantic colors (currency-gold, POE1
+  oxblood, POE2 cold steel, favorites-only violet), Fraunces/IBM Plex Sans/IBM Plex Mono (bundled
+  locally, offline-first), tooltip-card item rows, and a rune-slot search bar.
+- **Theme switching**: two themes (Ledger = the redesign above, Classic = the original
+  pre-redesign emerald/amber look, colors only) via a Settings dropdown, structured so more themes
+  can be added later without restructuring.
+- **Per-category price sort**: a 3-state toggle button (unsorted / highest-first / lowest-first)
+  per category header in the results view.
+- **UI scale setting**: a Settings dropdown (80%–150%) using `webFrame.setZoomFactor` for true page
+  zoom, paired with a window-resize IPC so the scale change actually fits everything instead of
+  clipping.
+- **Settings reset system**: individual resets for price alerts (disables without discarding
+  configured thresholds), cache, and other settings (refresh interval, active leagues, hotkey,
+  notifications, UI scale, display unit, favorites, recent searches) — plus a "reset all". Destructive
+  resets confirm first via a new in-app confirm modal (Electron's renderer has no native
+  `window.confirm()`).
+- Fix `lodash.isequal` deprecation warning: `electron-updater` depends on it directly; its only
+  usage (comparing update-manifest objects) is safely replaced by `node:util.isDeepStrictEqual` via
+  a local shim package + `package.json` `overrides`. (`inflight`, the other deprecated transitive
+  dependency, is left as-is — forcing a newer `glob` would break `electron-builder`'s asar
+  packaging, confirmed via source inspection.)
+
 ## 1.0.8 — 2026-07-04
 
 - Add a force-refresh icon directly on unloaded/empty category rows in the sidebar (not just the
