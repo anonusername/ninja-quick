@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.4 — 2026-07-04
+
+- Fix releases publishing as unpublished drafts: electron-builder's GitHub publish target defaults
+  `draft: true` (v1.0.2 and v1.0.3 both landed as drafts needing a manual "Publish" click). Set
+  `draft: false` in `package.json`'s `build.publish` config so `--publish always` actually
+  publishes the release, completing the "no manual steps after `git tag`" goal.
+
 ## 1.0.3 — 2026-07-04
 
 - Fix the Linux `.deb` build: electron-builder requires `author.email` in `package.json` for the
