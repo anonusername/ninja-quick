@@ -482,14 +482,17 @@ function renderCategorySidebar() {
     const entry = gameData[cat.slug];
     const count = entry && Array.isArray(entry.items) ? entry.items.length : null;
     const label = cat.label || formatCategoryName(cat.slug);
+    const needsRefresh = count === null || count === 0;
 
     const row = document.createElement('div');
     row.className = `sidebar-item ${categoryScope === cat.slug ? 'active' : ''} ${count === null ? 'unloaded' : ''}`;
     row.innerHTML = `
       <span class="sidebar-item-label">${escapeHtml(label)}</span>
       <span class="sidebar-item-count">${count === null ? '' : count}</span>
+      ${needsRefresh ? refreshButtonHtml(cat.slug) : ''}
     `;
     row.addEventListener('click', () => selectSidebarCategory(cat.slug));
+    if (needsRefresh) wireRefreshButton(row, cat.slug);
     categorySidebar.appendChild(row);
   }
 }

@@ -2,7 +2,8 @@
 
 ## Project Overview
 
-Windows desktop client that wraps [poe.ninja](https://poe.ninja/) functionality with:
+Cross-platform (Windows/macOS/Linux, via `electron-builder`) desktop client that wraps
+[poe.ninja](https://poe.ninja/) functionality with:
 
 1. **POE 1 / POE 2 game switcher** — toggle between Path of Exile 1 and Path of Exile 2 contexts (mirrors the tab UI on poe.ninja, where URLs switch between `/poe1/...` and `/poe2/...`). **POE 2 is the priority/default game.**
 2. **Unified search field** — single text input that searches across all categories on the site (items, currency, builds, atlas nodes, etc.)
@@ -26,18 +27,27 @@ The switcher toggles the base path segment (`poe1` ↔ `poe2`). All search queri
   clicking one immediately shows its full item list (auto-fetching first if needed) and stays
   "sticky" until a different category is clicked or the game switches — clicking the same
   (already-active) category again exits back to the overview
+- Any category with no data yet (never fetched, or fetched but genuinely empty) shows an inline
+  refresh icon (⟳) directly on its sidebar row (`renderCategorySidebar` in `renderer.js`), so users
+  can force a refresh without first navigating into that category — backed by the same
+  `fetch-category` IPC / `refreshCategoryNow` used by the per-category refresh button in the
+  results view
 
-### Live Category Discovery (not the hardcoded list)
+### Category Data: committed baseline + live discovery layered on top
 
-The sidebar's category list is **scraped live** from poe.ninja (`lib/category-discovery.js`), not
-read from `lib/categories.js`'s static array — PoE leagues add and remove economy categories every
-few months (confirmed directly: the live POE1 list had **40 categories** vs. the static list's 9).
-poe.ninja has no JSON endpoint for "what categories exist" (only economy *data* for a slug you
-already know), so this is the one place the app still does DOM scraping — deliberately narrow,
-via a hidden `BrowserWindow`, cached per game+league with a 24h TTL (`main.js`'s
-`getLiveCategories`). `lib/categories.js`'s static list is now only a fallback for when poe.ninja
-is unreachable or the scrape fails — it is NOT the source of truth for the sidebar or for what
-`runFullFetch` fetches.
+`lib/categories.js` ships a **committed, curated category map per game** — the source of truth on
+a fresh install, so the app always has the correct current category list without depending on a
+runtime scrape succeeding first. `lib/category-discovery.js` scrapes poe.ninja's own live
+economy-page nav (via a hidden `BrowserWindow`, cached per game+league with a 24h TTL — `main.js`'s
+`getLiveCategories`) as the **freshness layer on top**, overriding the committed map when poe.ninja
+adds/removes a category (PoE leagues do this every few months — confirmed directly: the live POE1
+list had **40 categories** vs. the committed baseline's smaller starting set). poe.ninja has no
+JSON endpoint for "what categories exist" (only economy *data* for a slug you already know), so
+this scrape is the one place the app still does DOM scraping — deliberately narrow in scope.
+
+To regenerate the committed baseline (e.g. at the start of a new PoE league), unset
+`ELECTRON_RUN_AS_NODE` and run `npm run generate-categories`, then commit the updated
+`lib/categories.js`.
 
 **Gotcha found building this:** the bare league URL (`/{game}/economy/{league}`) 404s outright
 ("That page did not exist") — the category nav only renders once you're already on a real
@@ -85,13 +95,30 @@ Unset it before any `npx electron ...` invocation.
 
 ## Tech Stack
 
-### Platform: Windows Desktop — Electron v33.0.0
+### Platform: Windows/macOS/Linux Desktop — Electron v33.0.0
 
 - Single visible `BrowserWindow` (720px wide, to fit the category sidebar) — data comes from HTTP
   requests via Electron's `net` module; a short-lived hidden `BrowserWindow` is used only for live
   category discovery (see above), not for economy data.
-- Node.js v23.5.0 runtime
+- Packaged and released via `electron-builder` (currently v26) — see "Releasing" below.
 - `contextIsolation: true`, `nodeIntegration: false` — secure preload bridge pattern via IPC
+
+### Releasing
+
+`CHANGELOG.md`-driven versioning: bump `version` in `package.json`, add a `CHANGELOG.md` entry,
+commit, then `git tag vX.Y.Z && git push origin vX.Y.Z`. That tag push triggers
+`.github/workflows/release.yml`, which runs the integration test suite then builds all three OSes
+via `electron-builder --publish always` and publishes a GitHub Release with installers +
+`latest*.yml` auto-update manifests. `electron-builder`'s GitHub publish target defaults to
+`releaseType: "draft"` — this repo sets `releaseType: "release"` in `package.json`'s
+`build.publish` config so tags publish with no manual step. CI pins `actions/checkout`/
+`actions/setup-node` to majors that declare the `node24` Actions runtime, and uses
+`node-version: 22` (current LTS) because `electron-builder@26`'s `@electron/rebuild`/`node-abi`
+dependencies require Node `>=22.12.0`.
+
+`build-windows-release.ps1` (repo root) builds a local Windows installer + portable exe without
+publishing — useful for a quick smoke-test build; pass `-SkipInstall` to build against whatever's
+already in `node_modules` instead of running `npm ci` first.
 
 ### Architecture
 
@@ -99,19 +126,22 @@ Unset it before any `npx electron ...` invocation.
 |------|---------|
 | `main.js` | Main process — creates the window, IPC handlers for data fetching & caching, live category discovery caching/TTL, `open-external` (opens poe.ninja links in the system browser) |
 | `lib/ninja-api.js` | poe.ninja JSON API client — league detection, adaptive endpoint/type resolution, normalized item shape |
-| `lib/category-discovery.js` | Live category-list scraper — hidden `BrowserWindow`, extracts category slugs+labels from the real economy-page nav |
-| `lib/categories.js` | Static fallback category list, used only when live discovery has never succeeded |
+| `lib/category-discovery.js` | Live category-list scraper — hidden `BrowserWindow`, extracts category slugs+labels from the real economy-page nav; the freshness layer on top of `lib/categories.js` |
+| `lib/categories.js` | Committed, curated category map per game — the source of truth on a fresh install; regenerate via `npm run generate-categories` |
 | `preload.js` | Secure IPC bridge — exposes `ninjaApi.getCachedData()`, `getLiveCategories()`, `getLeagues()`, `startFetch()`, `fetchCategory()`, `openExternal()`, `setHotkeyEnabled()`, `onFetchProgress()` to renderer |
 | `renderer/index.html` | Game switcher (2 tabs, POE 2 active by default), active label, search input + refresh/settings buttons, category sidebar + results area side by side |
-| `renderer/renderer.js` | Pure browser-side logic — game switching, category sidebar, 300ms debounced search, favorites, price alerts, settings panel, fuzzy search fallback, keyboard navigation |
+| `renderer/renderer.js` | Pure browser-side logic — game switching, category sidebar (incl. per-row force-refresh icon for unpopulated categories), 300ms debounced search, favorites, price alerts, settings panel, fuzzy search fallback, keyboard navigation |
 | `renderer/styles.css` | Dark theme — POE 1 = emerald (#22c55e), POE 2 = amber (#f59e0b); active tab gets glow effect; focused rows get accent outline |
+| `CHANGELOG.md` | Version history; updated alongside every `package.json` version bump, before tagging |
+| `.github/workflows/release.yml` | Tag-triggered CI: runs tests, then builds/publishes Windows/macOS/Linux via `electron-builder` |
+| `build-windows-release.ps1` | Local-only Windows build helper (see "Releasing" above) |
 | `scripts/discover-api.js` | Re-discovers poe.ninja's live economy-data API and regenerates `docs/api-endpoints.md` — run this if data goes empty |
 | `test-integration.js` | Integration tests against the live API — league detection, category fetch, cache round-trip, search simulation |
 
 ### UI Design Facts
 
 - Game switcher: prominent top-bar tabs (POE 1 / POE 2), emerald/amber accents on active tab, "Current: POE X" label below
-- Category sidebar: permanent left column, live-scraped labels, unloaded categories shown greyed out with no item count
+- Category sidebar: permanent left column, live-scraped labels, unloaded/empty categories shown greyed out with an inline force-refresh icon instead of an item count
 - Search field: central, always accessible, 300ms debounce, case-insensitive match across all categories
 - Results: grouped by collapsible category sections, item rows show name + sparkline + value + change %, click to open in the system browser
 - Keyboard navigation: ArrowUp/Down moves focus through results (skips rows inside a collapsed section), Enter opens selected item
