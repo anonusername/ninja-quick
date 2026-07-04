@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.10 — 2026-07-04
+
+- **Global sort sync**: sorting one category by price now sorts every category the same way
+  immediately, instead of each category remembering its own independent sort order.
+- **"All Uniques" super category**: every `unique-*` category is now grouped in the sidebar under
+  one gold-bordered box with an "All Uniques" header. Clicking it shows one merged, sorted list of
+  every unique item across all of them; its refresh icon updates every member category in one
+  batched pass instead of one at a time.
+- Fix 8 issues from code review: the alert bell now reflects a disabled alert (not just its
+  presence); the confirm-modal's keydown listener no longer leaks on non-Escape dismissal;
+  clearing the cache handles errors and no longer races an in-flight background fetch; theme
+  validation no longer trusts spoofable object-prototype truthiness; price alerts get their own
+  color instead of colliding with currency-gold under the Classic theme; theme colors are now read
+  live from CSS instead of duplicated in a JS table that could drift out of sync; a new
+  `RESETTABLE_SETTINGS` registry makes it harder to forget wiring a future setting into "Reset
+  other settings"; removed an unused CSS variable.
+
 ## 1.0.9 — 2026-07-04
 
 - **Visual redesign**: replace the arbitrary emerald/amber theme with a palette grounded in Path
