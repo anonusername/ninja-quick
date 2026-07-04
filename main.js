@@ -367,6 +367,18 @@ ipcMain.handle('set-ui-scale', (event, factor) => {
   return win.getContentSize();
 });
 
+// Settings → "Clear cache". Reuses CACHE_DIR/ensureCacheDir (the package.json `clean-cache` script
+// duplicates this path standalone since it runs outside Electron with no `app` access — this is
+// the one place the running app itself can delete its own cache).
+ipcMain.handle('clear-cache', () => {
+  if (fs.existsSync(CACHE_DIR)) {
+    for (const file of fs.readdirSync(CACHE_DIR)) {
+      fs.rmSync(path.join(CACHE_DIR, file), { force: true });
+    }
+  }
+  ensureCacheDir();
+});
+
 // The renderer owns all preference persistence (localStorage) — it tells main.js what to
 // register on startup and whenever the user flips the setting, rather than main.js keeping its
 // own separate settings store.

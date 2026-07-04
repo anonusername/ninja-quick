@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('ninjaApi', {
     return ipcRenderer.invoke('set-ui-scale', factor);
   },
 
+  // Settings → "Clear cache" — deletes every on-disk cache file; the renderer reloads afterward.
+  clearCache: () => ipcRenderer.invoke('clear-cache'),
+
   // Register/unregister the global show/hide hotkey — the renderer decides based on its own
   // localStorage-persisted preference; main.js holds no independent settings store.
   setHotkeyEnabled: (enabled) => ipcRenderer.invoke('set-hotkey-enabled', enabled),

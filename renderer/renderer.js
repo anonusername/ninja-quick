@@ -16,6 +16,7 @@ let fetching = { poe1: false, poe2: false };    // track in-progress fetches
 let categoryRefreshing = {};     // categorySlug -> true while a per-category refresh is in flight
 let refreshIntervalMs = 12 * 60 * 60 * 1000;    // default 12 hours (user-configurable)
 let zoomFactor = 1;              // UI scale (Settings) — see applyZoomFactor
+let currentTheme = 'ledger';     // 'ledger' | 'classic' — see setTheme
 let categoryScope = null;        // set when the user clicks a category in the overview
 let displayUnit = 'Auto';        // 'Auto' | 'Chaos' | 'Divine' | 'Exalted' — manual currency override
 
@@ -42,6 +43,32 @@ const ZOOM_OPTIONS = [0.8, 0.9, 1, 1.1, 1.25, 1.5];
 function applyZoomFactor(factor) {
   zoomFactor = factor;
   window.ninjaApi.setZoomFactor(factor);
+}
+
+// Themes — each entry here + a matching :root[data-theme="..."] block in styles.css is all a new
+// theme needs; nothing else in this file references theme colors directly except applyGameSwitch
+// below (which needs its own per-game hex since it sets inline style properties, not just toggling
+// a CSS class).
+const THEMES = [
+  { key: 'ledger', label: 'Ledger (default)' },
+  { key: 'classic', label: 'Classic' },
+];
+const THEME_ACCENTS = {
+  ledger: {
+    poe1: '#d2643b', poe1Glow: 'rgba(210,100,59,0.4)', poe1DividerGlow: 'rgba(210,100,59,0.6)',
+    poe2: '#7fa8c9', poe2Glow: 'rgba(127,168,201,0.4)', poe2DividerGlow: 'rgba(127,168,201,0.6)',
+  },
+  classic: {
+    poe1: '#22c55e', poe1Glow: 'rgba(34,197,94,0.4)', poe1DividerGlow: 'rgba(34,197,94,0.6)',
+    poe2: '#f59e0b', poe2Glow: 'rgba(245,158,11,0.4)', poe2DividerGlow: 'rgba(245,158,11,0.6)',
+  },
+};
+
+function setTheme(theme) {
+  currentTheme = THEME_ACCENTS[theme] ? theme : 'ledger';
+  document.documentElement.dataset.theme = currentTheme;
+  localStorage.setItem('ninja_theme', currentTheme);
+  applyGameSwitch(currentGame); // re-applies accent/glow/divider for the new theme's colors
 }
 
 const REFRESH_INTERVAL_OPTIONS = [
@@ -242,6 +269,41 @@ function showPromptModal(message, defaultValue) {
   });
 }
 
+/** A minimal custom confirm modal — sibling to showPromptModal above, for the same reason
+ * (Electron's renderer has no native window.confirm() either). Resolves true/false. */
+function showConfirmModal(message) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <p class="modal-message"></p>
+        <div class="modal-actions">
+          <button class="modal-cancel">Cancel</button>
+          <button class="modal-ok">Yes</button>
+        </div>
+      </div>
+    `;
+    overlay.querySelector('.modal-message').textContent = message;
+
+    const finish = (value) => {
+      overlay.remove();
+      resolve(value);
+    };
+
+    overlay.querySelector('.modal-ok').addEventListener('click', () => finish(true));
+    overlay.querySelector('.modal-cancel').addEventListener('click', () => finish(false));
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) finish(false);
+    });
+    document.addEventListener('keydown', function onKey(e) {
+      if (e.key === 'Escape') { finish(false); document.removeEventListener('keydown', onKey); }
+    });
+
+    document.body.appendChild(overlay);
+  });
+}
+
 /** Bell-icon click handler: prompts for a threshold, infers direction from the current value,
  * blank input removes the alert. A single minimal-UI interaction rather than a dedicated
  * alerts panel (see showPromptModal — Electron has no native window.prompt()). */
@@ -268,9 +330,11 @@ async function promptAlert(game, category, item) {
   const direction = item.amount !== null && threshold < item.amount ? 'below' : 'above';
 
   if (existing) {
-    Object.assign(existing, { threshold, direction, unit: item.unit, armed: true });
+    // Re-editing an alert via the bell icon is an explicit re-affirmation of interest in it, so
+    // also re-enable it if a prior "Reset price alerts" had turned it off.
+    Object.assign(existing, { threshold, direction, unit: item.unit, armed: true, enabled: true });
   } else {
-    alerts[game].push({ category, name: item.name, threshold, direction, unit: item.unit, armed: true });
+    alerts[game].push({ category, name: item.name, threshold, direction, unit: item.unit, armed: true, enabled: true });
   }
   saveAlerts(game);
   renderForQuery(searchInput.value.trim().toLowerCase());
@@ -287,6 +351,7 @@ function checkAlerts(game, gameData) {
   let changed = false;
 
   for (const alert of alerts[game]) {
+    if (alert.enabled === false) continue; // disabled via "Reset price alerts"
     const entry = gameData[alert.category];
     const item = entry && Array.isArray(entry.items) && entry.items.find((i) => i.name === alert.name);
     if (!item || item.amount === null || item.unit !== alert.unit) continue;
@@ -600,6 +665,10 @@ async function selectSidebarCategory(slug) {
   const savedZoom = parseFloat(localStorage.getItem('ninja_zoom_factor'));
   if (!isNaN(savedZoom) && ZOOM_OPTIONS.includes(savedZoom)) applyZoomFactor(savedZoom);
 
+  const savedTheme = localStorage.getItem('ninja_theme');
+  currentTheme = THEME_ACCENTS[savedTheme] ? savedTheme : 'ledger';
+  document.documentElement.dataset.theme = currentTheme;
+
   const savedUnit = localStorage.getItem('ninja_display_unit');
   if (savedUnit && ['Auto', 'Chaos', 'Divine', 'Exalted'].includes(savedUnit)) displayUnit = savedUnit;
   if (unitSelect) unitSelect.value = displayUnit;
@@ -732,10 +801,11 @@ function applyGameSwitch(game) {
   const label = game === 'poe1' ? 'POE 1' : 'POE 2';
   activeText.textContent = `Current: ${label}`;
 
-  // CSS accent override for the whole app — POE1 = oxblood ember, POE2 = cold steel (see
-  // styles.css's :root for why these specific colors, not arbitrary green/amber)
-  document.documentElement.style.setProperty('--accent', game === 'poe1' ? '#d2643b' : '#7fa8c9');
-  document.documentElement.style.setProperty('--glow', game === 'poe1' ? 'rgba(210,100,59,0.4)' : 'rgba(127,168,201,0.4)');
+  // CSS accent override for the whole app — colors come from THEME_ACCENTS so switching themes
+  // (setTheme) and switching games both stay in sync with the active theme's palette.
+  const themeAccents = THEME_ACCENTS[currentTheme] || THEME_ACCENTS.ledger;
+  document.documentElement.style.setProperty('--accent', game === 'poe1' ? themeAccents.poe1 : themeAccents.poe2);
+  document.documentElement.style.setProperty('--glow', game === 'poe1' ? themeAccents.poe1Glow : themeAccents.poe2Glow);
 
   // League selector dropdown
   updateLeagueSelector(game);
@@ -746,8 +816,8 @@ function applyGameSwitch(game) {
   // Divider color
   const divider = document.querySelector('.tab-divider');
   if (divider) {
-    divider.style.background = game === 'poe1' ? '#d2643b' : '#7fa8c9';
-    divider.style.boxShadow = `0 0 6px ${game === 'poe1' ? 'rgba(210,100,59,0.6)' : 'rgba(127,168,201,0.6)'}`;
+    divider.style.background = game === 'poe1' ? themeAccents.poe1 : themeAccents.poe2;
+    divider.style.boxShadow = `0 0 6px ${game === 'poe1' ? themeAccents.poe1DividerGlow : themeAccents.poe2DividerGlow}`;
   }
 }
 
@@ -999,6 +1069,69 @@ btnSettings.addEventListener('click', () => {
   else renderForQuery(searchInput.value.trim().toLowerCase());
 });
 
+// ── Settings reset actions ──────────────────
+// Each disables (not deletes, for alerts) or restores-to-default one area; resetAll runs all of
+// them plus the two things none of the individual actions own (theme, last-viewed game/league).
+
+function resetPriceAlerts() {
+  for (const game of ['poe1', 'poe2']) {
+    for (const alert of alerts[game]) alert.enabled = false;
+    saveAlerts(game);
+  }
+}
+
+async function clearCacheAction() {
+  await window.ninjaApi.clearCache();
+  cachedData = { poe1: {}, poe2: {} };
+  await reloadCache(currentGame);
+  // Deliberately not awaited — refilling every active league's every category over the network
+  // can take a long time (same background-fetch pacing the rest of the app uses); block only on
+  // the fast local clear+reload above so the reset UI itself doesn't hang waiting on it.
+  primeActiveLeagues().catch((err) => console.error('primeActiveLeagues after clearCache failed:', err));
+}
+
+function resetOtherSettings() {
+  refreshIntervalMs = 12 * 60 * 60 * 1000;
+  localStorage.removeItem('ninja_refresh_ms');
+  startRefreshTimer();
+
+  applyZoomFactor(1);
+  localStorage.removeItem('ninja_zoom_factor');
+
+  displayUnit = 'Auto';
+  localStorage.removeItem('ninja_display_unit');
+  if (unitSelect) unitSelect.value = displayUnit;
+
+  activeLeagues = [];
+  activeLeaguesInitialized = false;
+  localStorage.removeItem('ninja_active_leagues');
+  applyDefaultActiveLeagues(detectedLeagues.poe2);
+  primeActiveLeagues().catch((err) => console.error('primeActiveLeagues failed:', err));
+
+  window.ninjaApi.setHotkeyEnabled(false);
+  localStorage.removeItem('ninja_hotkey_enabled');
+
+  notificationsEnabled = true;
+  localStorage.removeItem('ninja_notifications_enabled');
+
+  favorites.poe1 = new Set();
+  favorites.poe2 = new Set();
+  localStorage.removeItem('ninja_favorites_poe1');
+  localStorage.removeItem('ninja_favorites_poe2');
+
+  localStorage.removeItem('ninja_recent_searches');
+}
+
+async function resetAllSettings() {
+  resetPriceAlerts();
+  resetOtherSettings();
+  await clearCacheAction();
+  setTheme('ledger');
+  localStorage.removeItem('ninja_game');
+  localStorage.removeItem('ninja_league_poe1');
+  localStorage.removeItem('ninja_league_poe2');
+}
+
 function renderSettings() {
   resultsContainer.innerHTML = '';
 
@@ -1056,6 +1189,23 @@ function renderSettings() {
   zoomRow.appendChild(zoomSelect);
   box.appendChild(zoomRow);
 
+  // Theme — see THEMES/THEME_ACCENTS and styles.css's :root[data-theme="..."] blocks
+  const themeRow = document.createElement('label');
+  themeRow.className = 'settings-row';
+  const themeSelect = document.createElement('select');
+  themeSelect.className = 'league-select';
+  for (const theme of THEMES) {
+    const el = document.createElement('option');
+    el.value = theme.key;
+    el.textContent = theme.label;
+    if (theme.key === currentTheme) el.selected = true;
+    themeSelect.appendChild(el);
+  }
+  themeSelect.addEventListener('change', () => setTheme(themeSelect.value));
+  themeRow.innerHTML = `<span>Theme</span>`;
+  themeRow.appendChild(themeSelect);
+  box.appendChild(themeRow);
+
   // Active leagues — which game+league combos the interval above actually refreshes. Listed for
   // both games regardless of currentGame, since "active" is independent of what's on screen.
   const activeLeaguesSection = document.createElement('div');
@@ -1107,6 +1257,39 @@ function renderSettings() {
   notifRow.innerHTML = `<span>Price alert notifications</span>`;
   notifRow.appendChild(notifCheckbox);
   box.appendChild(notifRow);
+
+  // Reset actions
+  const resetHeading = document.createElement('div');
+  resetHeading.className = 'settings-reset-heading';
+  resetHeading.textContent = 'Reset';
+  box.appendChild(resetHeading);
+
+  const addResetRow = (label, handler, { confirmMessage, danger } = {}) => {
+    const row = document.createElement('div');
+    row.className = 'settings-row';
+    const btn = document.createElement('button');
+    btn.className = danger ? 'settings-reset-btn danger' : 'settings-reset-btn';
+    btn.textContent = label;
+    btn.addEventListener('click', async () => {
+      if (confirmMessage && !(await showConfirmModal(confirmMessage))) return;
+      await handler();
+      renderSettings();
+    });
+    row.appendChild(btn);
+    box.appendChild(row);
+  };
+
+  addResetRow('Reset price alerts', resetPriceAlerts, {
+    confirmMessage: 'Disable every price alert for both games? Their thresholds are kept, just turned off.',
+  });
+  addResetRow('Clear cache', clearCacheAction);
+  addResetRow('Reset other settings', resetOtherSettings, {
+    confirmMessage: 'Reset background refresh, active leagues, hotkey, notifications, UI scale, and currency unit to their defaults — and clear favorites and recent searches?',
+  });
+  addResetRow('Reset all', resetAllSettings, {
+    confirmMessage: 'Reset everything — price alerts, cache, all other settings, favorites, recent searches, and theme?',
+    danger: true,
+  });
 
   resultsContainer.appendChild(box);
 }

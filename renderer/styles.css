@@ -35,8 +35,24 @@
   src: url('fonts/plex-mono-500.woff2') format('woff2');
 }
 
+/* Theme-independent — typography, radius, and motion don't change between themes (confirmed:
+   only colors are themed). `data-theme` on <html> selects which color block below applies;
+   set/persisted by renderer.js's setTheme(). Adding a 3rd theme later is just one more block here
+   plus one more THEME_ACCENTS entry in renderer.js — no other structural change needed. */
 :root {
-  /* Warm ink-and-parchment ground — a torchlit ledger, not a stark near-black SaaS panel. */
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  --radius: 4px;
+  --transition: 150ms ease;
+}
+
+/* "ledger" (default) — warm ink-and-parchment ground, a torchlit ledger rather than a stark
+   near-black SaaS panel; accent system grounded in Path of Exile's own material world. This
+   block's values also apply via the bare :root selector as a pre-JS fallback (see below). */
+:root,
+:root[data-theme="ledger"] {
   --bg-primary: #14100c;
   --bg-secondary: #1b160f;
   --bg-tertiary: #241c14;
@@ -69,13 +85,40 @@
   --danger-glow: rgba(210, 100, 59, 0.3);
   --favorite: #a98fdb;
   --favorite-glow: rgba(169, 143, 219, 0.3);
+}
 
-  --font-display: 'Fraunces', Georgia, serif;
-  --font-body: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+/* "classic" — the original pre-redesign palette (coolgrey + emerald/amber), colors only; keeps
+   the ledger theme's typography (Fraunces/Plex) rather than reverting fonts too. */
+:root[data-theme="classic"] {
+  --bg-primary: #1a1d24;
+  --bg-secondary: #232730;
+  --bg-tertiary: #2c3039;
+  --coolgrey-600: #5a6070;
+  --coolgrey-700: #3e4250;
+  --coolgrey-800: #2c3039;
+  --coolgrey-900: #1a1d24;
 
-  --radius: 4px;
-  --transition: 150ms ease;
+  --text-primary: #ffffff;
+  --text-secondary: #b0b6c5;
+  --text-muted: #7a8190;
+
+  --poe1-accent: #22c55e;
+  --poe1-glow: rgba(34, 197, 94, 0.4);
+
+  --poe2-accent: #f59e0b;
+  --poe2-glow: rgba(245, 158, 11, 0.4);
+
+  --accent: var(--poe1-accent);
+  --glow: var(--poe1-glow);
+
+  /* Old app had no separate fixed-semantic system — value/positive was green, negative was red,
+     and favorite-active just followed whichever game accent was active. */
+  --gold: #22c55e;
+  --gold-glow: rgba(34, 197, 94, 0.1);
+  --danger: #ef4444;
+  --danger-glow: rgba(239, 68, 68, 0.1);
+  --favorite: var(--accent);
+  --favorite-glow: var(--glow);
 }
 
 * {
@@ -742,6 +785,43 @@ mark {
 .settings-close:hover {
   color: var(--accent);
   background: var(--coolgrey-700);
+}
+
+.settings-reset-heading {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px solid var(--coolgrey-700);
+}
+
+.settings-reset-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius: var(--radius);
+  border: 1px solid var(--coolgrey-600);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
+}
+
+.settings-reset-btn:hover {
+  background: var(--coolgrey-700);
+  color: var(--text-primary);
+}
+
+.settings-reset-btn.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.settings-reset-btn.danger:hover {
+  background: var(--danger-glow);
 }
 
 .settings-row {
