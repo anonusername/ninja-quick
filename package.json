@@ -1,6 +1,6 @@
 {
   "name": "ninja-quick",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Cross-platform desktop client for poe.ninja with POE 1/POE 2 switcher and unified search",
   "main": "main.js",
   "author": {
@@ -57,7 +57,7 @@
       "provider": "github",
       "owner": "anonusername",
       "repo": "ninja-quick",
-      "draft": false
+      "releaseType": "release"
     },
     "win": {
       "target": [

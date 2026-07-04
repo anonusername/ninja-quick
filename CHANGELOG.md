@@ -1,11 +1,18 @@
 # Changelog
 
+## 1.0.5 — 2026-07-04
+
+- Fix `v1.0.4`: `"draft": false` isn't a valid `build.publish` key in electron-builder's schema
+  (caught locally via `build-windows-release.ps1`, before it could fail in CI). The correct option
+  is `releaseType`, which accepts `"draft" | "prerelease" | "release"` (default `"draft"`) — set to
+  `"release"` so `--publish always` actually publishes instead of failing config validation.
+
 ## 1.0.4 — 2026-07-04
 
 - Fix releases publishing as unpublished drafts: electron-builder's GitHub publish target defaults
-  `draft: true` (v1.0.2 and v1.0.3 both landed as drafts needing a manual "Publish" click). Set
-  `draft: false` in `package.json`'s `build.publish` config so `--publish always` actually
-  publishes the release, completing the "no manual steps after `git tag`" goal.
+  `draft: true` (v1.0.2 and v1.0.3 both landed as drafts needing a manual "Publish" click). Attempted
+  fix used the wrong key (`draft`); see 1.0.5 for the correction. Intent: complete the "no manual
+  steps after `git tag`" goal.
 
 ## 1.0.3 — 2026-07-04
 
