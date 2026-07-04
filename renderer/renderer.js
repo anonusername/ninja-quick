@@ -17,7 +17,7 @@ let categoryRefreshing = {};     // categorySlug -> true while a per-category re
 let refreshIntervalMs = 12 * 60 * 60 * 1000;    // default 12 hours (user-configurable)
 let zoomFactor = 1;              // UI scale (Settings) — see applyZoomFactor
 let currentTheme = 'ledger';     // 'ledger' | 'classic' — see setTheme
-let categoryScope = null;        // set when the user clicks a category in the overview
+let categoryScope = null;        // a real category slug, a super-category scope ('__super:<key>'), or null
 let displayUnit = 'Auto';        // 'Auto' | 'Chaos' | 'Divine' | 'Exalted' — manual currency override
 
 // favorites[game]: Set of "category::name" keys. alerts[game]: [{category,name,threshold,direction,unit,armed}].
@@ -46,29 +46,21 @@ function applyZoomFactor(factor) {
 }
 
 // Themes — each entry here + a matching :root[data-theme="..."] block in styles.css is all a new
-// theme needs; nothing else in this file references theme colors directly except applyGameSwitch
-// below (which needs its own per-game hex since it sets inline style properties, not just toggling
-// a CSS class).
+// theme needs. Colors themselves are never duplicated into JS (see applyThemeColors below) — the
+// CSS blocks are the only source of truth, read via getComputedStyle at the moment they're needed.
 const THEMES = [
   { key: 'ledger', label: 'Ledger (default)' },
   { key: 'classic', label: 'Classic' },
 ];
-const THEME_ACCENTS = {
-  ledger: {
-    poe1: '#d2643b', poe1Glow: 'rgba(210,100,59,0.4)', poe1DividerGlow: 'rgba(210,100,59,0.6)',
-    poe2: '#7fa8c9', poe2Glow: 'rgba(127,168,201,0.4)', poe2DividerGlow: 'rgba(127,168,201,0.6)',
-  },
-  classic: {
-    poe1: '#22c55e', poe1Glow: 'rgba(34,197,94,0.4)', poe1DividerGlow: 'rgba(34,197,94,0.6)',
-    poe2: '#f59e0b', poe2Glow: 'rgba(245,158,11,0.4)', poe2DividerGlow: 'rgba(245,158,11,0.6)',
-  },
-};
+const THEME_KEYS = new Set(THEMES.map((t) => t.key));
 
 function setTheme(theme) {
-  currentTheme = THEME_ACCENTS[theme] ? theme : 'ledger';
+  // Object.hasOwn-equivalent check via a real Set, not a plain-object truthiness lookup — the
+  // latter is spoofable by inherited Object.prototype keys like "constructor"/"toString".
+  currentTheme = THEME_KEYS.has(theme) ? theme : 'ledger';
   document.documentElement.dataset.theme = currentTheme;
   localStorage.setItem('ninja_theme', currentTheme);
-  applyGameSwitch(currentGame); // re-applies accent/glow/divider for the new theme's colors
+  applyThemeColors(currentGame); // re-applies accent/glow/divider for the new theme's colors
 }
 
 const REFRESH_INTERVAL_OPTIONS = [
@@ -135,6 +127,41 @@ function getFavoriteItems(game) {
     const entry = gameData[category];
     const item = entry && Array.isArray(entry.items) && entry.items.find((i) => i.name === name);
     if (item) result.push({ item, category });
+  }
+  return result;
+}
+
+// ── Super categories ────────────────────────
+//
+// A super category groups several real categories under one sidebar box + one merged results
+// view. Adding another one later is just another entry here — `match` decides which live
+// category slugs belong to it; nothing else needs to change. "All Uniques" groups every category
+// whose slug is prefixed `unique-` (the reliable signal — live-scraped *labels* can drift from
+// their slug, e.g. poe.ninja relabeling `breach-catalyst` as "Catalysts", so slug-prefix matching
+// is what's robust here, not label text).
+const SUPER_CATEGORIES = [
+  { key: 'all-uniques', label: 'All Uniques', match: (slug) => slug.startsWith('unique-') },
+];
+
+const SUPER_SCOPE_PREFIX = '__super:';
+
+function superCategoryForScope(scope) {
+  if (typeof scope !== 'string' || !scope.startsWith(SUPER_SCOPE_PREFIX)) return null;
+  const key = scope.slice(SUPER_SCOPE_PREFIX.length);
+  return SUPER_CATEGORIES.find((sc) => sc.key === key) || null;
+}
+
+/** Flattens every item across every live category matching a super category's `match()` into
+ * one [{item, category}] list, filtered by the same substring query renderResults already uses —
+ * modeled directly on getFavoriteItems above, which does the same cross-category flattening. */
+function getSuperCategoryItems(superCat, query) {
+  const gameData = cachedData[currentGame] || {};
+  const result = [];
+  for (const [category, entry] of categoryEntries(gameData)) {
+    if (!superCat.match(category) || !entry || !Array.isArray(entry.items)) continue;
+    for (const item of entry.items) {
+      if (!query || item.name.toLowerCase().includes(query)) result.push({ item, category });
+    }
   }
   return result;
 }
@@ -286,7 +313,14 @@ function showConfirmModal(message) {
     `;
     overlay.querySelector('.modal-message').textContent = message;
 
+    // Escape has to bind on `document` (there's no input field to scope it to like
+    // showPromptModal does) — finish() itself always detaches it, on every dismissal path, not
+    // just Escape, so it can never outlive this modal.
+    const onKey = (e) => {
+      if (e.key === 'Escape') finish(false);
+    };
     const finish = (value) => {
+      document.removeEventListener('keydown', onKey);
       overlay.remove();
       resolve(value);
     };
@@ -296,9 +330,7 @@ function showConfirmModal(message) {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) finish(false);
     });
-    document.addEventListener('keydown', function onKey(e) {
-      if (e.key === 'Escape') { finish(false); document.removeEventListener('keydown', onKey); }
-    });
+    document.addEventListener('keydown', onKey);
 
     document.body.appendChild(overlay);
   });
@@ -418,7 +450,8 @@ function buildItemRow(item, category, query, rates) {
   const changeClass = item.changePercent && (item.changePercent.startsWith('+') ? 'positive' : item.changePercent.startsWith('-') ? 'negative' : '');
   const sparkline = renderSparkline(item.trend);
   const isFavorite = favorites[currentGame].has(favoriteKey(category, item.name));
-  const hasAlert = !!findAlert(currentGame, category, item.name);
+  const existingAlert = findAlert(currentGame, category, item.name);
+  const hasAlert = !!existingAlert && existingAlert.enabled !== false;
 
   row.innerHTML = `
     <span class="item-name">${displayName}</span>
@@ -457,25 +490,31 @@ function buildItemRow(item, category, query, rates) {
 // re-expanded everything, since every render rebuilt every header with a fresh `collapsed = false`.
 let categoryCollapsed = {};
 
-// Per-category price-sort state: categorySlug -> 'none' | 'desc' | 'asc'. In-memory only,
-// same lifetime as categoryCollapsed above (resets on relaunch, not persisted).
-let categorySortMode = {};
+// Global price-sort state, shared by every category — sorting "Omens" descending immediately
+// shows every other category (e.g. "Soul Cores") as descending too, rather than each category
+// remembering its own independent sort mode. In-memory only, not persisted (matches
+// categoryCollapsed's lifetime above).
+let globalSortMode = 'none'; // 'none' | 'desc' | 'asc'
 const SORT_CYCLE = ['none', 'desc', 'asc'];
 
 function nextSortMode(mode) {
   return SORT_CYCLE[(SORT_CYCLE.indexOf(mode || 'none') + 1) % SORT_CYCLE.length];
 }
 
-/** Sorts items by their numeric `amount` per the category's current sort mode. Items with no
- * numeric value (amount === null) always sort last regardless of direction, since there's
- * nothing to compare. Returns a new array — never mutates the category's cached item list. */
-function sortByAmount(items, mode) {
+/** Sorts by numeric amount per the global sort mode. `getAmount` defaults to reading `.amount`
+ * directly (plain items) but accepts an accessor so the same function also sorts the merged
+ * {item, category} pairs a super category's flat list uses (see getSuperCategoryItems). Items
+ * with no numeric value always sort last regardless of direction. Returns a new array — never
+ * mutates the source. */
+function sortByAmount(items, mode, getAmount = (x) => x.amount) {
   if (mode !== 'desc' && mode !== 'asc') return items;
   return [...items].sort((a, b) => {
-    if (a.amount === null && b.amount === null) return 0;
-    if (a.amount === null) return 1;
-    if (b.amount === null) return -1;
-    return mode === 'desc' ? b.amount - a.amount : a.amount - b.amount;
+    const av = getAmount(a);
+    const bv = getAmount(b);
+    if (av === null && bv === null) return 0;
+    if (av === null) return 1;
+    if (bv === null) return -1;
+    return mode === 'desc' ? bv - av : av - bv;
   });
 }
 
@@ -518,25 +557,37 @@ function buildCollapsibleSection(collapseKey, title, count, extraHeaderHtml, pop
   return section;
 }
 
-function refreshButtonHtml(category) {
-  return `<button class="category-refresh" title="Refresh ${escapeHtml(formatCategoryName(category))} now">⟳</button>`;
+function refreshButtonHtml(category, labelOverride) {
+  const label = labelOverride || formatCategoryName(category);
+  return `<button class="category-refresh" title="Refresh ${escapeHtml(label)} now">⟳</button>`;
 }
 
-function sortButtonHtml(category) {
-  const mode = categorySortMode[category] || 'none';
-  const icon = mode === 'desc' ? '▼' : mode === 'asc' ? '▲' : '⇅';
-  const label = mode === 'desc' ? 'Sorted highest first' : mode === 'asc' ? 'Sorted lowest first' : 'Sort by price';
-  return `<button class="category-sort" title="${escapeHtml(label)} — click to change">${icon}</button>`;
+/** Sibling to wireRefreshButton for a super category's group refresh — refreshes every member
+ * slug in one batched pass (refreshCategoriesNow) instead of one category. */
+function wireGroupRefreshButton(header, slugs) {
+  const btn = header.querySelector('.category-refresh');
+  if (!btn) return;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    refreshCategoriesNow(slugs, btn);
+  });
 }
 
-/** `onToggle` re-renders whatever's showing this category (e.g. renderResults(query)) after the
- * sort mode changes — the button itself only owns the state cycle, not the redraw. */
-function wireSortButton(header, category, onToggle) {
+function sortButtonHtml() {
+  const icon = globalSortMode === 'desc' ? '▼' : globalSortMode === 'asc' ? '▲' : '⇅';
+  const label = globalSortMode === 'desc' ? 'Sorted highest first' : globalSortMode === 'asc' ? 'Sorted lowest first' : 'Sort by price';
+  return `<button class="category-sort" title="${escapeHtml(label)} (applies to every category) — click to change">${icon}</button>`;
+}
+
+/** `onToggle` re-renders whatever's showing (e.g. renderResults(query)) after the sort mode
+ * changes — the button itself only owns the state cycle, not the redraw. Sort mode is global, so
+ * this affects every category's display, not just the one the click came from. */
+function wireSortButton(header, onToggle) {
   const btn = header.querySelector('.category-sort');
   if (!btn) return;
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    categorySortMode[category] = nextSortMode(categorySortMode[category]);
+    globalSortMode = nextSortMode(globalSortMode);
     onToggle();
   });
 }
@@ -585,6 +636,43 @@ async function loadLiveCategories(game) {
   if (currentGame === game) renderCategorySidebar();
 }
 
+function buildSidebarItemRow(cat, gameData) {
+  const entry = gameData[cat.slug];
+  const count = entry && Array.isArray(entry.items) ? entry.items.length : null;
+  const label = cat.label || formatCategoryName(cat.slug);
+  const needsRefresh = count === null || count === 0;
+
+  const row = document.createElement('div');
+  row.className = `sidebar-item ${categoryScope === cat.slug ? 'active' : ''} ${count === null ? 'unloaded' : ''}`;
+  row.innerHTML = `
+    <span class="sidebar-item-label">${escapeHtml(label)}</span>
+    <span class="sidebar-item-count">${count === null ? '' : count}</span>
+    ${needsRefresh ? refreshButtonHtml(cat.slug) : ''}
+  `;
+  row.addEventListener('click', () => selectSidebarCategory(cat.slug));
+  if (needsRefresh) wireRefreshButton(row, cat.slug);
+  return row;
+}
+
+function buildSuperCategoryGroup(superCat, memberCats, gameData) {
+  const scope = SUPER_SCOPE_PREFIX + superCat.key;
+  const group = document.createElement('div');
+  group.className = 'sidebar-supercategory-group';
+
+  const header = document.createElement('div');
+  header.className = `sidebar-supercategory-header ${categoryScope === scope ? 'active' : ''}`;
+  header.innerHTML = `
+    <span class="sidebar-item-label">${escapeHtml(superCat.label)}</span>
+    ${refreshButtonHtml(superCat.key, superCat.label)}
+  `;
+  header.addEventListener('click', () => selectSuperCategory(superCat.key));
+  wireGroupRefreshButton(header, memberCats.map((c) => c.slug));
+  group.appendChild(header);
+
+  for (const cat of memberCats) group.appendChild(buildSidebarItemRow(cat, gameData));
+  return group;
+}
+
 function renderCategorySidebar() {
   const gameData = cachedData[currentGame] || {};
   const cats = liveCategories[currentGame] || [];
@@ -595,23 +683,36 @@ function renderCategorySidebar() {
     return;
   }
 
-  for (const cat of cats) {
-    const entry = gameData[cat.slug];
-    const count = entry && Array.isArray(entry.items) ? entry.items.length : null;
-    const label = cat.label || formatCategoryName(cat.slug);
-    const needsRefresh = count === null || count === 0;
+  const renderedSuperKeys = new Set();
 
-    const row = document.createElement('div');
-    row.className = `sidebar-item ${categoryScope === cat.slug ? 'active' : ''} ${count === null ? 'unloaded' : ''}`;
-    row.innerHTML = `
-      <span class="sidebar-item-label">${escapeHtml(label)}</span>
-      <span class="sidebar-item-count">${count === null ? '' : count}</span>
-      ${needsRefresh ? refreshButtonHtml(cat.slug) : ''}
-    `;
-    row.addEventListener('click', () => selectSidebarCategory(cat.slug));
-    if (needsRefresh) wireRefreshButton(row, cat.slug);
-    categorySidebar.appendChild(row);
+  for (const cat of cats) {
+    const superCat = SUPER_CATEGORIES.find((sc) => sc.match(cat.slug));
+    if (superCat) {
+      if (renderedSuperKeys.has(superCat.key)) continue; // already rendered with the group below
+      renderedSuperKeys.add(superCat.key);
+      const memberCats = cats.filter((c) => superCat.match(c.slug));
+      categorySidebar.appendChild(buildSuperCategoryGroup(superCat, memberCats, gameData));
+      continue;
+    }
+    categorySidebar.appendChild(buildSidebarItemRow(cat, gameData));
   }
+}
+
+/** Clicking the "All Uniques"-style group header selects the merged super-category view
+ * (renderResults handles the '__super:' scope specially). Deliberately does NOT auto-fetch
+ * uncached member categories the way selectSidebarCategory does for a single category — that's
+ * what the group's own refresh icon is for; a plain click shouldn't surprise-trigger fetching
+ * every member category at once. */
+function selectSuperCategory(key) {
+  const scope = SUPER_SCOPE_PREFIX + key;
+  categoryScope = categoryScope === scope ? null : scope;
+  searchInput.value = '';
+  const superCat = SUPER_CATEGORIES.find((sc) => sc.key === key);
+  searchInput.placeholder = categoryScope
+    ? `${superCat.label} — showing all items…`
+    : `Search ${currentGame === 'poe1' ? 'POE 1' : 'POE 2'} items, currency, uniques…`;
+  renderCategorySidebar();
+  renderResults('');
 }
 
 /** Clicking a sidebar category immediately shows its full item list (like poe.ninja's own nav),
@@ -665,9 +766,10 @@ async function selectSidebarCategory(slug) {
   const savedZoom = parseFloat(localStorage.getItem('ninja_zoom_factor'));
   if (!isNaN(savedZoom) && ZOOM_OPTIONS.includes(savedZoom)) applyZoomFactor(savedZoom);
 
-  const savedTheme = localStorage.getItem('ninja_theme');
-  currentTheme = THEME_ACCENTS[savedTheme] ? savedTheme : 'ledger';
-  document.documentElement.dataset.theme = currentTheme;
+  // setTheme() also calls applyThemeColors(currentGame) here (currentGame is already resolved
+  // above) — redundant with the full applyGameSwitch() call later in this init, but cheap and
+  // keeps this one validation rule (THEME_KEYS.has(...)) in one place instead of duplicated.
+  setTheme(localStorage.getItem('ninja_theme'));
 
   const savedUnit = localStorage.getItem('ninja_display_unit');
   if (savedUnit && ['Auto', 'Chaos', 'Divine', 'Exalted'].includes(savedUnit)) displayUnit = savedUnit;
@@ -792,6 +894,26 @@ function switchGame(game) {
   else renderCategorySidebar();
 }
 
+/** Sets --accent/--glow and the tab-divider's colors for the given game, reading them straight
+ * off the active theme's CSS custom properties (styles.css's :root[data-theme="..."] blocks) —
+ * the only place these colors are defined. Split out from applyGameSwitch so a pure theme change
+ * (setTheme) doesn't also pay for rebuilding the league dropdown/tabs/placeholder below. */
+function applyThemeColors(game) {
+  const style = getComputedStyle(document.documentElement);
+  const accent = style.getPropertyValue(game === 'poe1' ? '--poe1-accent' : '--poe2-accent').trim();
+  const glow = style.getPropertyValue(game === 'poe1' ? '--poe1-glow' : '--poe2-glow').trim();
+  const dividerGlow = style.getPropertyValue(game === 'poe1' ? '--poe1-divider-glow' : '--poe2-divider-glow').trim();
+
+  document.documentElement.style.setProperty('--accent', accent);
+  document.documentElement.style.setProperty('--glow', glow);
+
+  const divider = document.querySelector('.tab-divider');
+  if (divider) {
+    divider.style.background = accent;
+    divider.style.boxShadow = `0 0 6px ${dividerGlow}`;
+  }
+}
+
 function applyGameSwitch(game) {
   // Tabs
   btnPoe1.classList.toggle('active', game === 'poe1');
@@ -801,24 +923,13 @@ function applyGameSwitch(game) {
   const label = game === 'poe1' ? 'POE 1' : 'POE 2';
   activeText.textContent = `Current: ${label}`;
 
-  // CSS accent override for the whole app — colors come from THEME_ACCENTS so switching themes
-  // (setTheme) and switching games both stay in sync with the active theme's palette.
-  const themeAccents = THEME_ACCENTS[currentTheme] || THEME_ACCENTS.ledger;
-  document.documentElement.style.setProperty('--accent', game === 'poe1' ? themeAccents.poe1 : themeAccents.poe2);
-  document.documentElement.style.setProperty('--glow', game === 'poe1' ? themeAccents.poe1Glow : themeAccents.poe2Glow);
+  applyThemeColors(game);
 
   // League selector dropdown
   updateLeagueSelector(game);
 
   // Update placeholder
   searchInput.placeholder = `Search ${label} items, currency, uniques…`;
-
-  // Divider color
-  const divider = document.querySelector('.tab-divider');
-  if (divider) {
-    divider.style.background = game === 'poe1' ? themeAccents.poe1 : themeAccents.poe2;
-    divider.style.boxShadow = `0 0 6px ${game === 'poe1' ? themeAccents.poe1DividerGlow : themeAccents.poe2DividerGlow}`;
-  }
 }
 
 function updateWindowTitle() {
@@ -1009,35 +1120,67 @@ function renderResults(query) {
   const gameData = cachedData[currentGame] || {};
   const rates = gameData.__meta && gameData.__meta.rates;
   const allCategories = categoryEntries(gameData);
-  const categories = categoryScope ? allCategories.filter(([cat]) => cat === categoryScope) : allCategories;
+  const superCat = superCategoryForScope(categoryScope);
+  const categories = superCat
+    ? allCategories.filter(([cat]) => superCat.match(cat))
+    : categoryScope
+      ? allCategories.filter(([cat]) => cat === categoryScope)
+      : allCategories;
   let totalMatches = 0;
 
-  for (const [category, entry] of categories) {
-    const items = entry && Array.isArray(entry.items) ? entry.items : [];
-    if (items.length === 0) continue;
+  if (superCat) {
+    // One merged, flat list across every member category (per your choice) — same
+    // cross-category-flattening pattern getFavoriteItems/'__favorites' already uses, just sourced
+    // from getSuperCategoryItems instead of the favorites set.
+    const merged = sortByAmount(getSuperCategoryItems(superCat, query), globalSortMode, (pair) => pair.item.amount);
+    totalMatches = merged.length;
+    const limitKey = SUPER_SCOPE_PREFIX + superCat.key;
+    const limit = categoryRenderLimit[limitKey] || RENDER_CAP;
+    const memberSlugs = categories.map(([cat]) => cat);
 
-    let matches = items.filter((item) => item.name.toLowerCase().includes(query));
-    if (matches.length === 0) continue;
-
-    matches = sortByAmount(matches, categorySortMode[category]);
-    totalMatches += matches.length;
-
-    const limit = categoryRenderLimit[category] || RENDER_CAP;
     const section = buildCollapsibleSection(
-      category,
-      formatCategoryName(category),
-      matches.length,
-      `<span class="category-updated">${escapeHtml(formatAgo(entry.fetchedAt))}</span>${refreshButtonHtml(category)}${sortButtonHtml(category)}`,
+      limitKey,
+      superCat.label,
+      merged.length,
+      `${refreshButtonHtml(superCat.key, superCat.label)}${sortButtonHtml()}`,
       (itemsDiv, header) => {
-        wireRefreshButton(header, category);
-        wireSortButton(header, category, () => renderResults(query));
-        matches.slice(0, limit).forEach((item) => {
+        wireGroupRefreshButton(header, memberSlugs);
+        wireSortButton(header, () => renderResults(query));
+        merged.slice(0, limit).forEach(({ item, category }) => {
           itemsDiv.appendChild(buildItemRow(item, category, query, rates));
         });
-        appendShowMoreIfNeeded(itemsDiv, category, matches.length, limit, () => renderResults(query));
+        appendShowMoreIfNeeded(itemsDiv, limitKey, merged.length, limit, () => renderResults(query));
       }
     );
     resultsContainer.appendChild(section);
+  } else {
+    for (const [category, entry] of categories) {
+      const items = entry && Array.isArray(entry.items) ? entry.items : [];
+      if (items.length === 0) continue;
+
+      let matches = items.filter((item) => item.name.toLowerCase().includes(query));
+      if (matches.length === 0) continue;
+
+      matches = sortByAmount(matches, globalSortMode);
+      totalMatches += matches.length;
+
+      const limit = categoryRenderLimit[category] || RENDER_CAP;
+      const section = buildCollapsibleSection(
+        category,
+        formatCategoryName(category),
+        matches.length,
+        `<span class="category-updated">${escapeHtml(formatAgo(entry.fetchedAt))}</span>${refreshButtonHtml(category)}${sortButtonHtml()}`,
+        (itemsDiv, header) => {
+          wireRefreshButton(header, category);
+          wireSortButton(header, () => renderResults(query));
+          matches.slice(0, limit).forEach((item) => {
+            itemsDiv.appendChild(buildItemRow(item, category, query, rates));
+          });
+          appendShowMoreIfNeeded(itemsDiv, category, matches.length, limit, () => renderResults(query));
+        }
+      );
+      resultsContainer.appendChild(section);
+    }
   }
 
   if (totalMatches === 0) {
@@ -1058,9 +1201,11 @@ function renderResults(query) {
     resultsContainer.innerHTML = `<div class="no-results">No results for "${escapeHtml(query)}" in ${currentGame.toUpperCase()}</div>`;
   }
 
-  dataStatus.textContent = categoryScope
-    ? `${totalMatches} matches in ${formatCategoryName(categoryScope)}`
-    : `${totalMatches} matches across ${allCategories.length} categories`;
+  dataStatus.textContent = superCat
+    ? `${totalMatches} matches in ${superCat.label}`
+    : categoryScope
+      ? `${totalMatches} matches in ${formatCategoryName(categoryScope)}`
+      : `${totalMatches} matches across ${allCategories.length} categories`;
 }
 
 btnSettings.addEventListener('click', () => {
@@ -1081,7 +1226,7 @@ function resetPriceAlerts() {
 }
 
 async function clearCacheAction() {
-  await window.ninjaApi.clearCache();
+  await window.ninjaApi.clearCache(); // throws if the delete failed — let the caller surface it
   cachedData = { poe1: {}, poe2: {} };
   await reloadCache(currentGame);
   // Deliberately not awaited — refilling every active league's every category over the network
@@ -1090,41 +1235,60 @@ async function clearCacheAction() {
   primeActiveLeagues().catch((err) => console.error('primeActiveLeagues after clearCache failed:', err));
 }
 
-function resetOtherSettings() {
-  refreshIntervalMs = 12 * 60 * 60 * 1000;
-  localStorage.removeItem('ninja_refresh_ms');
-  startRefreshTimer();
+// Central registry for "Reset other settings" — add a new persisted setting's reset-to-default
+// logic here so it can't be forgotten later; resetOtherSettings just iterates this list instead
+// of hand-listing every setting inline (which is exactly how the zoom-factor row nearly slipped
+// through when it was added).
+const RESETTABLE_SETTINGS = [
+  () => {
+    refreshIntervalMs = 12 * 60 * 60 * 1000;
+    localStorage.removeItem('ninja_refresh_ms');
+    startRefreshTimer();
+  },
+  () => {
+    applyZoomFactor(1);
+    localStorage.removeItem('ninja_zoom_factor');
+  },
+  () => {
+    displayUnit = 'Auto';
+    localStorage.removeItem('ninja_display_unit');
+    if (unitSelect) unitSelect.value = displayUnit;
+  },
+  () => {
+    activeLeagues = [];
+    activeLeaguesInitialized = false;
+    localStorage.removeItem('ninja_active_leagues');
+    applyDefaultActiveLeagues(detectedLeagues.poe2);
+  },
+  () => {
+    window.ninjaApi.setHotkeyEnabled(false);
+    localStorage.removeItem('ninja_hotkey_enabled');
+  },
+  () => {
+    notificationsEnabled = true;
+    localStorage.removeItem('ninja_notifications_enabled');
+  },
+  () => {
+    favorites.poe1 = new Set();
+    favorites.poe2 = new Set();
+    localStorage.removeItem('ninja_favorites_poe1');
+    localStorage.removeItem('ninja_favorites_poe2');
+  },
+  () => localStorage.removeItem('ninja_recent_searches'),
+];
 
-  applyZoomFactor(1);
-  localStorage.removeItem('ninja_zoom_factor');
-
-  displayUnit = 'Auto';
-  localStorage.removeItem('ninja_display_unit');
-  if (unitSelect) unitSelect.value = displayUnit;
-
-  activeLeagues = [];
-  activeLeaguesInitialized = false;
-  localStorage.removeItem('ninja_active_leagues');
-  applyDefaultActiveLeagues(detectedLeagues.poe2);
-  primeActiveLeagues().catch((err) => console.error('primeActiveLeagues failed:', err));
-
-  window.ninjaApi.setHotkeyEnabled(false);
-  localStorage.removeItem('ninja_hotkey_enabled');
-
-  notificationsEnabled = true;
-  localStorage.removeItem('ninja_notifications_enabled');
-
-  favorites.poe1 = new Set();
-  favorites.poe2 = new Set();
-  localStorage.removeItem('ninja_favorites_poe1');
-  localStorage.removeItem('ninja_favorites_poe2');
-
-  localStorage.removeItem('ninja_recent_searches');
+/** `prime: false` skips the post-reset active-league refetch — used by resetAllSettings, which
+ * runs clearCacheAction right after this and does its own single prime pass once the cache is
+ * actually empty. Priming here too would race an in-flight fetch's cache write against that
+ * delete (confirmed via code review: this exact sequence was the trigger). */
+function resetOtherSettings({ prime = true } = {}) {
+  for (const apply of RESETTABLE_SETTINGS) apply();
+  if (prime) primeActiveLeagues().catch((err) => console.error('primeActiveLeagues failed:', err));
 }
 
 async function resetAllSettings() {
   resetPriceAlerts();
-  resetOtherSettings();
+  resetOtherSettings({ prime: false });
   await clearCacheAction();
   setTheme('ledger');
   localStorage.removeItem('ninja_game');
@@ -1189,7 +1353,7 @@ function renderSettings() {
   zoomRow.appendChild(zoomSelect);
   box.appendChild(zoomRow);
 
-  // Theme — see THEMES/THEME_ACCENTS and styles.css's :root[data-theme="..."] blocks
+  // Theme — see THEMES and styles.css's :root[data-theme="..."] blocks
   const themeRow = document.createElement('label');
   themeRow.className = 'settings-row';
   const themeSelect = document.createElement('select');
@@ -1272,7 +1436,12 @@ function renderSettings() {
     btn.textContent = label;
     btn.addEventListener('click', async () => {
       if (confirmMessage && !(await showConfirmModal(confirmMessage))) return;
-      await handler();
+      try {
+        await handler();
+      } catch (err) {
+        console.error(`${label} failed:`, err);
+        dataStatus.textContent = `${label} failed: ${err.message}`;
+      }
       renderSettings();
     });
     row.appendChild(btn);
@@ -1366,6 +1535,33 @@ async function refreshCategoryNow(category, buttonEl) {
     console.error(`refreshCategoryNow(${category}) failed:`, err);
   } finally {
     categoryRefreshing[category] = false;
+  }
+}
+
+/** Batched version of refreshCategoryNow for a super category's group refresh — fetches every
+ * member slug in parallel, then does ONE reloadCache/checkAlerts/renderForQuery pass afterward
+ * instead of one per slug (looping refreshCategoryNow N times would work but redundantly reload
+ * the whole cache and re-render N times over). Slugs already mid-refresh (e.g. a per-category
+ * refresh in flight) are skipped rather than double-fetched. */
+async function refreshCategoriesNow(slugs, buttonEl) {
+  const toFetch = slugs.filter((slug) => !categoryRefreshing[slug]);
+  if (toFetch.length === 0) return;
+  const game = currentGame;
+  const league = currentLeague[game];
+  if (!league) return;
+
+  for (const slug of toFetch) categoryRefreshing[slug] = true;
+  buttonEl.classList.add('spinning');
+  buttonEl.disabled = true;
+  try {
+    await Promise.all(toFetch.map((slug) => window.ninjaApi.fetchCategory(game, league, slug)));
+    const freshCache = await reloadCache(game);
+    checkAlerts(game, freshCache);
+    if (currentGame === game) renderForQuery(searchInput.value.trim().toLowerCase());
+  } catch (err) {
+    console.error(`refreshCategoriesNow(${toFetch.join(',')}) failed:`, err);
+  } finally {
+    for (const slug of toFetch) categoryRefreshing[slug] = false;
   }
 }
 

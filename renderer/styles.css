@@ -38,7 +38,8 @@
 /* Theme-independent — typography, radius, and motion don't change between themes (confirmed:
    only colors are themed). `data-theme` on <html> selects which color block below applies;
    set/persisted by renderer.js's setTheme(). Adding a 3rd theme later is just one more block here
-   plus one more THEME_ACCENTS entry in renderer.js — no other structural change needed. */
+   — renderer.js's applyThemeColors() reads every color it needs straight off these custom
+   properties via getComputedStyle, so there's no separate JS-side table to keep in sync. */
 :root {
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -68,23 +69,28 @@
   /* POE 1 — oxblood ember (Wraeclast's older, bloodier identity) */
   --poe1-accent: #d2643b;
   --poe1-glow: rgba(210, 100, 59, 0.4);
+  --poe1-divider-glow: rgba(210, 100, 59, 0.6);
 
   /* POE 2 — tempered cold steel (a colder, later era) */
   --poe2-accent: #7fa8c9;
   --poe2-glow: rgba(127, 168, 201, 0.4);
+  --poe2-divider-glow: rgba(127, 168, 201, 0.6);
 
   --accent: var(--poe1-accent); /* dynamic — set by JS per active game */
   --glow: var(--poe1-glow);     /* dynamic — set by JS per active game */
 
   /* Fixed semantic colors — do NOT swap with --accent; these mean the same thing regardless
      of which game tab is active. Gold = currency/value/positive, ember = danger/negative,
-     violet = the one deliberate rarity-adjacent accent, reserved for pinned favorites only. */
+     violet = the one deliberate rarity-adjacent accent reserved for pinned favorites, teal =
+     a price alert is armed — each one distinct from every other so they're never ambiguous
+     next to each other. */
   --gold: #d4af37;
   --gold-glow: rgba(212, 175, 55, 0.35);
   --danger: #d2643b;
   --danger-glow: rgba(210, 100, 59, 0.3);
   --favorite: #a98fdb;
-  --favorite-glow: rgba(169, 143, 219, 0.3);
+  --alert: #4fbdba;
+  --alert-glow: rgba(79, 189, 186, 0.3);
 }
 
 /* "classic" — the original pre-redesign palette (coolgrey + emerald/amber), colors only; keeps
@@ -104,21 +110,25 @@
 
   --poe1-accent: #22c55e;
   --poe1-glow: rgba(34, 197, 94, 0.4);
+  --poe1-divider-glow: rgba(34, 197, 94, 0.6);
 
   --poe2-accent: #f59e0b;
   --poe2-glow: rgba(245, 158, 11, 0.4);
+  --poe2-divider-glow: rgba(245, 158, 11, 0.6);
 
   --accent: var(--poe1-accent);
   --glow: var(--poe1-glow);
 
   /* Old app had no separate fixed-semantic system — value/positive was green, negative was red,
-     and favorite-active just followed whichever game accent was active. */
+     favorite-active just followed whichever game accent was active, and the alert bell was a
+     fixed amber independent of the active game (same value restored here). */
   --gold: #22c55e;
   --gold-glow: rgba(34, 197, 94, 0.1);
   --danger: #ef4444;
   --danger-glow: rgba(239, 68, 68, 0.1);
   --favorite: var(--accent);
-  --favorite-glow: var(--glow);
+  --alert: #f59e0b;
+  --alert-glow: rgba(245, 158, 11, 0.3);
 }
 
 * {
@@ -381,6 +391,49 @@ body {
   color: var(--text-muted);
 }
 
+/* Super categories — e.g. "All Uniques" boxing every unique-* category together. The gold border
+ * doubles as the box AND (with the header sitting right at its top edge) the group's own label,
+ * rather than a separate title floating outside it. */
+.sidebar-supercategory-group {
+  margin: 6px 8px;
+  border: 1px solid var(--gold);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.sidebar-supercategory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--gold);
+  background: var(--gold-glow);
+  cursor: pointer;
+  border-bottom: 1px solid var(--gold);
+}
+
+.sidebar-supercategory-header:hover {
+  background: var(--coolgrey-700);
+}
+
+.sidebar-supercategory-header.active {
+  color: var(--text-primary);
+  background: var(--gold);
+}
+
+.sidebar-supercategory-group .sidebar-item {
+  padding-left: 20px;
+}
+
+.sidebar-supercategory-group .sidebar-item.active {
+  padding-left: 18px;
+}
+
 .results-container {
   flex: 1;
   overflow-y: auto;
@@ -634,7 +687,7 @@ body {
 }
 
 .item-alert.active {
-  color: var(--gold);
+  color: var(--alert);
 }
 
 /* No results */
