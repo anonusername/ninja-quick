@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3 — 2026-07-04
+
+- Fix the Linux `.deb` build: electron-builder requires `author.email` in `package.json` for the
+  package maintainer field, which the bare-string `author` didn't provide. Added a GitHub noreply
+  address so no real personal email is exposed in the public repo.
+
 ## 1.0.2 — 2026-07-03
 
 - Fix CI test job: a fresh checkout's `chrome-sandbox` binary isn't root-owned/4755, which made
