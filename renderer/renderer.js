@@ -37,12 +37,15 @@ let activeLeaguesInitialized = false; // true once loaded from storage OR a defa
 
 // Page-zoom presets (see preload.js's setZoomFactor / webFrame.setZoomFactor) — scales text,
 // layout, and icons together as one true zoom, so the UI "fits" at every level rather than
-// just growing text past its containers.
+// just growing text past its containers. These are the *displayed* percentages (what the
+// dropdown shows and what gets persisted) — BASE_ZOOM_MULTIPLIER below is what actually gets
+// applied, so the whole scale can be recalibrated without changing the menu or persisted values.
 const ZOOM_OPTIONS = [0.8, 0.9, 1, 1.1, 1.25, 1.5];
+const BASE_ZOOM_MULTIPLIER = 1.25; // "100%" now applies what used to be "125%"
 
 function applyZoomFactor(factor) {
   zoomFactor = factor;
-  window.ninjaApi.setZoomFactor(factor);
+  window.ninjaApi.setZoomFactor(factor * BASE_ZOOM_MULTIPLIER);
 }
 
 // Themes — each entry here + a matching :root[data-theme="..."] block in styles.css is all a new
