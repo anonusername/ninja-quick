@@ -1633,9 +1633,29 @@ async function copyItemName(name, buttonEl) {
   }
 }
 
-/** Render an item's value in the user's chosen display currency ("Auto" = item's own native unit). */
+// "Auto" tries these in order and shows the first one whose converted value is >= 1 (avoids
+// tiny fractions like "0.00095 Divine" for a cheap item in an otherwise expensive category) —
+// falls back to Chaos's value even if it's still < 1 ("then go super small values"), since
+// there's no smaller common unit left to try.
+const AUTO_UNIT_PRIORITY = ['Divine', 'Exalted', 'Chaos'];
+
+/** Render an item's value in the user's chosen display currency. "Auto" picks whichever of
+ * Divine/Exalted/Chaos keeps the number readable (see AUTO_UNIT_PRIORITY) rather than just
+ * passing through the item's raw native unit, which could be a tiny fraction. */
 function formatDisplayValue(item, rates) {
-  if (displayUnit === 'Auto' || item.amount === null || !rates) return item.value;
+  if (item.amount === null || !rates) return item.value;
+
+  if (displayUnit === 'Auto') {
+    let smallestFallback = null;
+    for (const unit of AUTO_UNIT_PRIORITY) {
+      const converted = convertAmount(item.amount, item.unit, unit, rates);
+      if (converted === null) continue;
+      if (converted >= 1) return `${trimNumber(converted)} ${unit}`;
+      smallestFallback = { converted, unit }; // last one wins — AUTO_UNIT_PRIORITY ends at Chaos
+    }
+    return smallestFallback ? `${trimNumber(smallestFallback.converted)} ${smallestFallback.unit}` : item.value;
+  }
+
   const converted = convertAmount(item.amount, item.unit, displayUnit, rates);
   if (converted === null) return item.value; // no conversion rate available — fall back to native unit
   return `${trimNumber(converted)} ${displayUnit}`;
