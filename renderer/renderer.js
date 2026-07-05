@@ -57,6 +57,7 @@ function applyZoomFactor(factor) {
 const THEMES = [
   { key: 'ledger', label: 'Ledger (default)' },
   { key: 'classic', label: 'Classic' },
+  { key: 'hotdogstand', label: 'Hotdog Stand' },
 ];
 const THEME_KEYS = new Set(THEMES.map((t) => t.key));
 

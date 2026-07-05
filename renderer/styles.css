@@ -131,6 +131,43 @@
   --alert-glow: rgba(245, 158, 11, 0.3);
 }
 
+/* "Hotdog Stand" — the infamous Windows 3.1 color scheme (see assets/hotdogstand.jpg), faithfully
+   reusing its actual palette: pure red field, black active-window/highlight, white window text,
+   yellow secondary panels, and the classic #c0c0c0 Windows button-face gray for chrome/muted
+   text — deliberately loud and high-contrast, that's the entire point of this scheme. */
+:root[data-theme="hotdogstand"] {
+  --bg-primary: #ff0000;
+  --bg-secondary: #cc0000;
+  --bg-tertiary: #000000;
+  --coolgrey-600: #c0c0c0;
+  --coolgrey-700: #800000;
+  --coolgrey-800: #990000;
+  --coolgrey-900: #660000;
+
+  --text-primary: #ffffff;
+  --text-secondary: #ffff00;
+  --text-muted: #c0c0c0;
+
+  --poe1-accent: #ffff00;
+  --poe1-glow: rgba(255, 255, 0, 0.4);
+  --poe1-divider-glow: rgba(255, 255, 0, 0.6);
+
+  --poe2-accent: #ffffff;
+  --poe2-glow: rgba(255, 255, 255, 0.4);
+  --poe2-divider-glow: rgba(255, 255, 255, 0.6);
+
+  --accent: var(--poe1-accent);
+  --glow: var(--poe1-glow);
+
+  --gold: #ffff00;
+  --gold-glow: rgba(255, 255, 0, 0.35);
+  --danger: #000000;
+  --danger-glow: rgba(0, 0, 0, 0.3);
+  --favorite: #ffffff;
+  --alert: #c0c0c0;
+  --alert-glow: rgba(192, 192, 192, 0.3);
+}
+
 * {
   margin: 0;
   padding: 0;
