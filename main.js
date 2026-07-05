@@ -254,10 +254,20 @@ app.on('second-instance', () => {
 // this works on Windows/Linux out of the box; macOS auto-update is blocked by Gatekeeper until
 // the app is code-signed & notarized (see README's signing section) — checkForUpdates() there
 // will just fail silently, which is fine, not a bug.
+//
+// Re-checking every 4 hours means a long-running instance (left open for days) still notices a
+// new release without needing a restart — a one-time startup check alone can't do that. Once an
+// update has actually been downloaded, the user already has a restart prompt (see the
+// 'update-downloaded' toast wiring in renderer.js), so there's no reason to keep re-checking/
+// re-downloading until they act on it or relaunch.
+const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
+let updateReadyToInstall = false;
+
 function initAutoUpdater() {
   if (!app.isPackaged) return;
   autoUpdater.autoDownload = true;
   autoUpdater.on('update-downloaded', () => {
+    updateReadyToInstall = true;
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('update-downloaded');
     }
@@ -265,7 +275,12 @@ function initAutoUpdater() {
   autoUpdater.on('error', (err) => {
     console.error('autoUpdater error:', err.message);
   });
-  autoUpdater.checkForUpdates().catch((err) => console.error('checkForUpdates failed:', err.message));
+
+  const check = () => autoUpdater.checkForUpdates().catch((err) => console.error('checkForUpdates failed:', err.message));
+  check();
+  setInterval(() => {
+    if (!updateReadyToInstall) check();
+  }, UPDATE_CHECK_INTERVAL_MS);
 }
 
 ipcMain.handle('restart-to-update', () => {
