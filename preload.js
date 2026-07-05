@@ -51,4 +51,12 @@ contextBridge.exposeInMainWorld('ninjaApi', {
     return () => ipcRenderer.removeListener('update-downloaded', handler);
   },
   restartToUpdate: () => ipcRenderer.invoke('restart-to-update'),
+
+  // About modal — Help > About ninja-quick in the app menu.
+  getAppInfo: () => ipcRenderer.invoke('get-app-info'),
+  onShowAbout: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('show-about', handler);
+    return () => ipcRenderer.removeListener('show-about', handler);
+  },
 });

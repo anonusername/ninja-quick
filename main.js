@@ -224,6 +224,38 @@ function createTray() {
   tray.on('click', toggleWindow);
 }
 
+// Electron ships a default application menu (File/Edit/View/Window/Help) automatically unless
+// something else calls Menu.setApplicationMenu — this app never had, so this is the first time
+// the menu is actually customized. Standard roles (appMenu/fileMenu/editMenu/viewMenu/windowMenu)
+// keep the usual platform-appropriate boilerplate (Cmd+Q, Reload, Toggle DevTools, etc.) for free;
+// only the Help menu is custom, showing a renderer-rendered About modal (matching the app's own
+// showPromptModal/showConfirmModal style) instead of a native OS About panel, so it looks the same
+// on every platform and can include a live GitHub link.
+function createAppMenu() {
+  const template = [
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
+    { role: 'fileMenu' },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' },
+    {
+      role: 'help',
+      submenu: [
+        {
+          label: 'About ninja-quick',
+          click: () => {
+            if (!mainWindow) return;
+            if (!mainWindow.isVisible()) mainWindow.show();
+            mainWindow.focus();
+            mainWindow.webContents.send('show-about');
+          },
+        },
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function setHotkeyEnabled(enabled) {
   if (enabled === hotkeyRegistered) return hotkeyRegistered;
   if (enabled) {
@@ -292,6 +324,7 @@ ipcMain.handle('restart-to-update', () => {
 app.whenReady().then(() => {
   createWindow();
   createTray();
+  createAppMenu();
   initAutoUpdater();
 });
 
@@ -315,6 +348,13 @@ app.on('activate', () => {
 });
 
 // ── IPC Handlers ───────────────────────────
+
+// Backs the About modal — app.getVersion() reflects package.json's version (or the packaged
+// app's version resource once built), so this never drifts out of sync with an actual release.
+ipcMain.handle('get-app-info', () => ({
+  name: app.getName(),
+  version: app.getVersion(),
+}));
 
 ipcMain.handle('get-cached-data', (_event, gameKey, leagueSlug) => {
   if (!leagueSlug) return {};

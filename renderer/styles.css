@@ -858,6 +858,44 @@ mark {
   background: var(--coolgrey-700);
 }
 
+/* ════════ About modal (Help > About ninja-quick) ════════ */
+
+.about-box {
+  text-align: center;
+  padding: 24px 20px;
+}
+
+.about-icon {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 12px;
+}
+
+.about-name {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.about-version {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.about-tagline {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.about-actions {
+  justify-content: center;
+  margin-top: 18px;
+}
+
 /* ════════ Item-description tooltip ════════ */
 
 .item-tooltip {

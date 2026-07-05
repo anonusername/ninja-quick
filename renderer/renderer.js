@@ -417,6 +417,48 @@ function showConfirmModal(message) {
   });
 }
 
+/** Help > About ninja-quick — a custom modal (not app.showAboutPanel()) so it looks and behaves
+ * the same on every platform and can carry a live GitHub link. main.js sends 'show-about' when
+ * the menu item is clicked (see onShowAbout wiring in the init block below); version comes from
+ * getAppInfo() (main process app.getVersion()), never hardcoded here so it can't drift from an
+ * actual release. */
+async function showAboutModal() {
+  const info = await window.ninjaApi.getAppInfo();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box about-box">
+      <img class="about-icon" src="../assets/ninja-quick-icon.png" alt="" />
+      <p class="about-name">${escapeHtml(info.name)}</p>
+      <p class="about-version">Version ${escapeHtml(info.version)}</p>
+      <p class="about-tagline">Desktop client for poe.ninja</p>
+      <div class="modal-actions about-actions">
+        <button class="modal-cancel about-github">View on GitHub</button>
+        <button class="modal-ok">Close</button>
+      </div>
+    </div>
+  `;
+
+  const onKey = (e) => {
+    if (e.key === 'Escape') finish();
+  };
+  const finish = () => {
+    document.removeEventListener('keydown', onKey);
+    overlay.remove();
+  };
+
+  overlay.querySelector('.modal-ok').addEventListener('click', finish);
+  overlay.querySelector('.about-github').addEventListener('click', () => {
+    window.ninjaApi.openExternal('https://github.com/anonusername/ninja-quick');
+  });
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) finish();
+  });
+  document.addEventListener('keydown', onKey);
+
+  document.body.appendChild(overlay);
+}
+
 /** Bell-icon click handler: prompts for a threshold, infers direction from the current value,
  * blank input removes the alert. A single minimal-UI interaction rather than a dedicated
  * alerts panel (see showPromptModal — Electron has no native window.prompt()). */
@@ -1026,6 +1068,9 @@ async function selectSidebarCategory(slug) {
 
   if (window.ninjaApi.onUpdateDownloaded) {
     window.ninjaApi.onUpdateDownloaded(showUpdateToast);
+  }
+  if (window.ninjaApi.onShowAbout) {
+    window.ninjaApi.onShowAbout(showAboutModal);
   }
 })();
 
