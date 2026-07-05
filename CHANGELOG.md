@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.0.13 — 2026-07-05
+
+- **Item-description tooltip now only triggers on the item name** — hovering the sparkline,
+  value, change%, or the favorite/alert/copy buttons no longer pops it.
+- **New POE2 super category "All Gems"** (Uncut Gems + Lineage Support Gems), matching the
+  grouping POE1 already had for its own gem categories.
+- **Sidebar now shows every individual category before the grouped ones** (All Uniques, All
+  Gems, etc.), instead of interleaving them in whatever order poe.ninja's own nav happened to
+  list them.
+- Fixed several categories (Omens, Catalysts, Abyssal Bones, Liquid Emotions) missing item
+  descriptions entirely — the scraper didn't know about a few categories' historical
+  league-mechanic API codenames, so it reported "no data" even though poe.ninja has it.
+- Fixed literal `\n` text showing up in a few descriptions (e.g. Hinekora's Lock) instead of an
+  actual line break.
+- Essence-type mod text ("Sceptre: ...", "Body Armour: ...") now colors the gear-type prefix
+  distinctly from the effect text.
+- Alert bell is now a real outline/filled icon — previously it was always the same filled glyph
+  with only a color change, so an inactive alert could look active at a glance.
+
 ## 1.0.12 — 2026-07-05
 
 - **Base type always shown**: uniques/gems that share a display name (e.g. two "Temporalis" rows
