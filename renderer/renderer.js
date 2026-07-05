@@ -489,6 +489,57 @@ function pushRecentSearch(query) {
   localStorage.setItem('ninja_recent_searches', JSON.stringify(recent.slice(0, 8)));
 }
 
+// ── Item-description tooltip ────────────────
+// One singleton element reused across every hover (not created/destroyed per row) — rows fire
+// mouseenter/mouseleave often while scanning a list, and this avoids churning DOM nodes for that.
+let itemTooltipEl = null;
+
+function getItemTooltipEl() {
+  if (itemTooltipEl) return itemTooltipEl;
+  itemTooltipEl = document.createElement('div');
+  itemTooltipEl.className = 'item-tooltip';
+  document.body.appendChild(itemTooltipEl);
+  return itemTooltipEl;
+}
+
+/** Shows the description tooltip for a row, or does nothing if the item has no description data
+ * (currency-type items poe.ninja itself has no text for, e.g. Divination Cards — see
+ * scripts/discover-currency-descriptions.js). Positioned from the row's own bounding rect and
+ * clamped to the viewport so it can never overflow off-screen even at the app's minimum width. */
+function showItemTooltip(row, description) {
+  if (!description) return;
+  const tooltip = getItemTooltipEl();
+  const modsHtml = description.mods && description.mods.length
+    ? `<ul class="item-tooltip-mods">${description.mods.map((m) => `<li>${escapeHtml(m)}</li>`).join('')}</ul>`
+    : '';
+
+  tooltip.innerHTML = `
+    ${description.baseType ? `<div class="item-tooltip-basetype">${escapeHtml(description.baseType)}</div>` : ''}
+    ${description.levelRequired ? `<div class="item-tooltip-level">Requires Level ${description.levelRequired}</div>` : ''}
+    ${modsHtml}
+    ${description.flavourText ? `<div class="item-tooltip-flavour">${escapeHtml(description.flavourText)}</div>` : ''}
+    ${description.corrupted ? `<div class="item-tooltip-corrupted">Corrupted</div>` : ''}
+  `;
+  tooltip.classList.add('visible');
+
+  const rowRect = row.getBoundingClientRect();
+  const tipRect = tooltip.getBoundingClientRect();
+  const margin = 8;
+  let left = rowRect.left;
+  let top = rowRect.bottom + margin;
+  if (top + tipRect.height > window.innerHeight - margin) top = rowRect.top - tipRect.height - margin;
+  if (top < margin) top = margin;
+  if (left + tipRect.width > window.innerWidth - margin) left = window.innerWidth - tipRect.width - margin;
+  if (left < margin) left = margin;
+
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+}
+
+function hideItemTooltip() {
+  if (itemTooltipEl) itemTooltipEl.classList.remove('visible');
+}
+
 /** Builds one item row — shared by search results and the favorites section so the two can't
  * drift apart. `query` is optional; when empty, the name is shown plain (no highlight). */
 function buildItemRow(item, category, query, rates) {
@@ -516,6 +567,8 @@ function buildItemRow(item, category, query, rates) {
   `;
 
   row.addEventListener('click', () => openInPoeNinjaCategory(category, item.name));
+  row.addEventListener('mouseenter', () => showItemTooltip(row, item.description));
+  row.addEventListener('mouseleave', hideItemTooltip);
 
   row.querySelector('.item-copy').addEventListener('click', (e) => {
     e.stopPropagation();

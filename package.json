@@ -48,6 +48,7 @@
       "main.js",
       "preload.js",
       "lib/**/*",
+      "data/**/*",
       "renderer/**/*",
       "assets/**/*",
       "package.json",
