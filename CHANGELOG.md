@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.11 — 2026-07-05
+
+- **Item-description tooltip**: hovering any item row now shows its PoE-style description (base
+  type, level requirement, mods, flavor text) — for uniques, gems, and currency-type items alike,
+  matching how poe.ninja itself presents item info. Currency-type items (orbs, fragments,
+  essences, runes, omens, etc.) have no description data in poe.ninja's price API at all; that
+  text is scraped once from poe.ninja's own site into a committed data file the app ships with, so
+  showing it doesn't depend on any extra network call at runtime.
+- **POE1 super categories**: the "All Uniques"/"All Augments"-style grouped sidebar entries
+  (introduced for POE2 in 1.0.10) now also cover POE1 — All Uniques, All Maps, All Gems, Crafting
+  Currency, and All Atlas.
+- Recalibrated UI scale so the "100%" zoom option matches the old "125%" — the default view is
+  larger without changing any of the other zoom presets' relative spacing.
+- Fixed the "Auto" currency-display option showing unreadable tiny fractions (e.g. "0.00095
+  Divine") for cheap items in expensive categories — it now falls back through Divine → Exalted →
+  Chaos and picks the first one that displays as at least 1.0.
+
 ## 1.0.10 — 2026-07-04
 
 - **Global sort sync**: sorting one category by price now sorts every category the same way
