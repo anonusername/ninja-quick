@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.14 — 2026-07-05
+
+- **New app/tray icon**: replaced the placeholder icon with the new badge design, with a
+  transparent background (no more white square around it) and a properly sized master image
+  instead of an oversized 2048x2048 file.
+
 ## 1.0.13 — 2026-07-05
 
 - **Item-description tooltip now only triggers on the item name** — hovering the sparkline,
