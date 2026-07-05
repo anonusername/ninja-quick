@@ -64,6 +64,20 @@ function withTimeout(promise, ms, label) {
   ]).finally(() => clearTimeout(timer));
 }
 
+// Mirrors lib/ninja-api.js's own `resolvedCombo` overrides — those categories' real `type` query
+// value is a historical league-mechanic codename no PascalCase transform of the slug could ever
+// guess (e.g. Omens' actual API type is "Ritual"). Without trying these first, this script's own
+// probe (below) reports "no data for this league" for a category poe.ninja plainly has data for,
+// because it only ever tries typeVariants(categorySlug) guesses. Keep in sync with ninja-api.js
+// if that map changes.
+const KNOWN_TYPE_OVERRIDES = new Map([
+  ['poe2:abyssal-bones', { familyIdx: 1, type: 'Abyss' }],
+  ['poe2:omens', { familyIdx: 1, type: 'Ritual' }],
+  ['poe2:liquid-emotions', { familyIdx: 1, type: 'Delirium' }],
+  ['poe2:breach-catalyst', { familyIdx: 1, type: 'Breach' }],
+  ['poe2:unique-relics', { familyIdx: 0, type: 'UniqueSanctumRelics' }],
+]);
+
 /** Minimal duplicate of ninja-api.js's family-probing, just enough to tell stash vs exchange
  * apart and grab one sample item id — this script is a one-off maintenance tool, not runtime
  * code, so it intentionally doesn't import ninja-api.js's private resolution internals. */
@@ -91,22 +105,25 @@ async function probeCategory(game, leagueDisplayName, categorySlug) {
     });
   }
 
-  for (let familyIdx = 0; familyIdx < families.length; familyIdx++) {
-    for (const type of typeVariants(categorySlug)) {
-      const json = await getJson(families[familyIdx](type));
-      if (json && Array.isArray(json.lines) && json.lines.length > 0) {
-        const family = familyIdx === 0 ? 'stash' : 'exchange';
-        const hasFlavour = family === 'stash' && typeof json.lines[0].flavourText === 'string';
-        // Every row's short internal `id` (e.g. "bauble", "chaos") differs from its actual
-        // detail-page URL slug (e.g. "glassblowers-bauble", "chaos-orb") — confirmed empirically
-        // for both "core" trade currencies AND ordinary rows, so this can't be derived by
-        // transforming `id` itself. The top-level `items` array maps every id to its real
-        // `detailsId` (the URL slug); fall back to the raw id only if that lookup is missing.
-        const itemsById = new Map((Array.isArray(json.items) ? json.items : []).map((it) => [it.id, it]));
-        const meta = itemsById.get(json.lines[0].id);
-        const sampleId = (meta && meta.detailsId) || json.lines[0].id;
-        return { family, sampleId, hasFlavour, itemCount: json.lines.length };
-      }
+  const cacheKey = `${game}:${categorySlug}`;
+  const candidates = KNOWN_TYPE_OVERRIDES.has(cacheKey)
+    ? [KNOWN_TYPE_OVERRIDES.get(cacheKey)]
+    : families.flatMap((_, familyIdx) => typeVariants(categorySlug).map((type) => ({ familyIdx, type })));
+
+  for (const { familyIdx, type } of candidates) {
+    const json = await getJson(families[familyIdx](type));
+    if (json && Array.isArray(json.lines) && json.lines.length > 0) {
+      const family = familyIdx === 0 ? 'stash' : 'exchange';
+      const hasFlavour = family === 'stash' && typeof json.lines[0].flavourText === 'string';
+      // Every row's short internal `id` (e.g. "bauble", "chaos") differs from its actual
+      // detail-page URL slug (e.g. "glassblowers-bauble", "chaos-orb") — confirmed empirically
+      // for both "core" trade currencies AND ordinary rows, so this can't be derived by
+      // transforming `id` itself. The top-level `items` array maps every id to its real
+      // `detailsId` (the URL slug); fall back to the raw id only if that lookup is missing.
+      const itemsById = new Map((Array.isArray(json.items) ? json.items : []).map((it) => [it.id, it]));
+      const meta = itemsById.get(json.lines[0].id);
+      const sampleId = (meta && meta.detailsId) || json.lines[0].id;
+      return { family, sampleId, hasFlavour, itemCount: json.lines.length };
     }
   }
   return null;
@@ -173,6 +190,14 @@ function unquoteJsString(raw) {
   return inner.replace(/\\(.)/g, (_, c) => ({ n: '\n', t: '\t', r: '\r' }[c] || c));
 }
 
+/** Some chunks double-escape their whitespace (an escaped backslash followed by a literal "n"),
+ * so unquoteJsString's single unescape pass leaves a literal two-character `\n` in the result
+ * instead of a real newline (confirmed on POE2 Currency's "Hinekora's Lock"). Safe to run
+ * unconditionally — text with no leftover escape sequences passes through unchanged. */
+function normalizeEscapes(text) {
+  return text.replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t');
+}
+
 function parseFieldValue(raw) {
   if (raw[0] === '[') {
     const items = [...raw.matchAll(new RegExp(STR, 'g'))].map((m) => unquoteJsString(m[0]));
@@ -202,7 +227,11 @@ function extractDescriptions(jsSource) {
       else if (key === 'explicitMods' || key === 'implicitMods') mods.push(...value);
     }
     if (!descrText && !flavourText && mods.length === 0) continue; // not a description object, just an id/name match elsewhere
-    found.set(id, { name, descrText: descrText || flavourText, mods: mods.map(stripTags) });
+    found.set(id, {
+      name,
+      descrText: normalizeEscapes(descrText || flavourText),
+      mods: mods.map((m) => normalizeEscapes(stripTags(m))),
+    });
   }
   return found;
 }

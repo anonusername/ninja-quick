@@ -866,6 +866,12 @@ mark {
   font-size: 13px;
   color: var(--gold);
   line-height: 1.4;
+  white-space: pre-line;
+}
+
+.item-tooltip-mod-gear {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .item-tooltip-flavour {
@@ -873,6 +879,7 @@ mark {
   font-style: italic;
   color: var(--text-muted);
   line-height: 1.4;
+  white-space: pre-line;
 }
 
 .item-tooltip-corrupted {

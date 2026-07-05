@@ -178,6 +178,12 @@ const SUPER_CATEGORIES = [
     match: (slug) => ['skill-gems', 'imbued-gems'].includes(slug),
   },
   {
+    key: 'all-gems-poe2',
+    label: 'All Gems',
+    games: ['poe2'],
+    match: (slug) => ['uncut-gems', 'lineage-support-gems'].includes(slug),
+  },
+  {
     key: 'crafting-currency',
     label: 'Crafting Currency',
     games: ['poe1'],
@@ -506,11 +512,21 @@ function getItemTooltipEl() {
  * (currency-type items poe.ninja itself has no text for, e.g. Divination Cards — see
  * scripts/discover-currency-descriptions.js). Positioned from the row's own bounding rect and
  * clamped to the viewport so it can never overflow off-screen even at the app's minimum width. */
+// Some mod text (mainly Essences) is shaped "GearType(s): effect text" — e.g. "Sceptre: Allies in
+// your Presence deal..." or "Body Armour (Bonded): ...". Style the gear-type label distinctly from
+// the effect text. Capped at 40 chars so an ordinary mod that just happens to contain a colon deep
+// in its effect text (not a short leading label) doesn't get misidentified.
+function formatModText(mod) {
+  const m = /^([^:]{1,40}):\s*(.+)$/s.exec(mod);
+  if (!m) return escapeHtml(mod);
+  return `<span class="item-tooltip-mod-gear">${escapeHtml(m[1])}:</span> ${escapeHtml(m[2])}`;
+}
+
 function showItemTooltip(row, description) {
   if (!description) return;
   const tooltip = getItemTooltipEl();
   const modsHtml = description.mods && description.mods.length
-    ? `<ul class="item-tooltip-mods">${description.mods.map((m) => `<li>${escapeHtml(m)}</li>`).join('')}</ul>`
+    ? `<ul class="item-tooltip-mods">${description.mods.map((m) => `<li>${formatModText(m)}</li>`).join('')}</ul>`
     : '';
 
   tooltip.innerHTML = `
@@ -540,6 +556,16 @@ function hideItemTooltip() {
   if (itemTooltipEl) itemTooltipEl.classList.remove('visible');
 }
 
+// Unicode has no outline/filled bell pair the way ★/☆ works for favorites — 🔔 always reads as a
+// solid bell regardless of color, so an inactive alert looked "filled" too. A small inline SVG
+// gives a real stroke-only outline for the default state and a filled shape once an alert is set;
+// `currentColor` keeps using the existing `.item-alert`/`.item-alert.active` color rules.
+function bellIconHtml(active) {
+  const path = 'M8 1a1 1 0 0 1 1 1v.6c2 .5 3.5 2.3 3.5 4.4v2.6l1 1.8H2.5l1-1.8V7c0-2.1 1.5-3.9 3.5-4.4V2a1 1 0 0 1 1-1Zm-1.7 12.5a1.8 1.8 0 0 0 3.4 0Z';
+  const fillAttrs = active ? 'fill="currentColor"' : 'fill="none" stroke="currentColor" stroke-width="1.2"';
+  return `<svg viewBox="0 0 16 16" width="12" height="12"><path ${fillAttrs} d="${path}"/></svg>`;
+}
+
 /** Builds one item row — shared by search results and the favorites section so the two can't
  * drift apart. `query` is optional; when empty, the name is shown plain (no highlight). */
 function buildItemRow(item, category, query, rates) {
@@ -563,15 +589,17 @@ function buildItemRow(item, category, query, rates) {
       ${displayValue ? `<span class="item-value">${escapeHtml(displayValue)}</span>` : ''}
       ${item.changePercent ? `<span class="item-change ${changeClass}">${escapeHtml(item.changePercent)}</span>` : ''}
       <button class="item-favorite ${isFavorite ? 'active' : ''}" title="Pin to favorites">${isFavorite ? '★' : '☆'}</button>
-      <button class="item-alert ${hasAlert ? 'active' : ''}" title="Set a price alert">🔔</button>
+      <button class="item-alert ${hasAlert ? 'active' : ''}" title="Set a price alert">${bellIconHtml(hasAlert)}</button>
       <button class="item-copy" title="Copy item name">⧉</button>
     </div>
     ${item.description && item.description.baseType ? `<span class="item-basetype">${escapeHtml(item.description.baseType)}</span>` : ''}
   `;
 
   row.addEventListener('click', () => openInPoeNinjaCategory(category, item.name));
-  row.addEventListener('mouseenter', () => showItemTooltip(row, item.description));
-  row.addEventListener('mouseleave', hideItemTooltip);
+
+  const nameEl = row.querySelector('.item-name');
+  nameEl.addEventListener('mouseenter', () => showItemTooltip(row, item.description));
+  nameEl.addEventListener('mouseleave', hideItemTooltip);
 
   row.querySelector('.item-copy').addEventListener('click', (e) => {
     e.stopPropagation();
@@ -781,6 +809,9 @@ function buildSuperCategoryGroup(superCat, memberCats, gameData) {
   return group;
 }
 
+/** Ungrouped categories render first, then every super-category group — rather than interleaved
+ * wherever a group's first member happens to fall in poe.ninja's own nav order — so the sidebar
+ * reads as "individual categories, then the grouped ones" instead of an arbitrary mix. */
 function renderCategorySidebar() {
   const gameData = cachedData[currentGame] || {};
   const cats = liveCategories[currentGame] || [];
@@ -791,19 +822,23 @@ function renderCategorySidebar() {
     return;
   }
 
-  const renderedSuperKeys = new Set();
+  const ungrouped = [];
+  const groups = []; // [{ superCat, memberCats }], in first-appearance order
+  const seenSuperKeys = new Set();
 
   for (const cat of cats) {
     const superCat = SUPER_CATEGORIES.find((sc) => superCategoryAppliesToGame(sc, currentGame) && sc.match(cat.slug));
     if (superCat) {
-      if (renderedSuperKeys.has(superCat.key)) continue; // already rendered with the group below
-      renderedSuperKeys.add(superCat.key);
-      const memberCats = cats.filter((c) => superCat.match(c.slug));
-      categorySidebar.appendChild(buildSuperCategoryGroup(superCat, memberCats, gameData));
+      if (seenSuperKeys.has(superCat.key)) continue; // already queued with the group below
+      seenSuperKeys.add(superCat.key);
+      groups.push({ superCat, memberCats: cats.filter((c) => superCat.match(c.slug)) });
       continue;
     }
-    categorySidebar.appendChild(buildSidebarItemRow(cat, gameData));
+    ungrouped.push(cat);
   }
+
+  for (const cat of ungrouped) categorySidebar.appendChild(buildSidebarItemRow(cat, gameData));
+  for (const { superCat, memberCats } of groups) categorySidebar.appendChild(buildSuperCategoryGroup(superCat, memberCats, gameData));
 }
 
 /** Clicking the "All Uniques"-style group header selects the merged super-category view
