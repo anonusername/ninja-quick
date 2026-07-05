@@ -7,6 +7,12 @@ engineered by watching real network traffic (`scripts/discover-api.js`) and by d
 the base paths were known. poe.ninja can change any of this without notice. If category data silently
 starts coming back empty, re-run `scripts/discover-api.js` and diff this file before assuming the app broke.
 
+> **Note:** none of the endpoints below ever return item *description* text (flavor text, mods) for
+> currency-type categories — that's a separate data source entirely (poe.ninja's own client bundle,
+> not this API), scraped by `scripts/discover-currency-descriptions.js` into a committed
+> `data/item-descriptions.json`. Don't go looking for a description field in these responses; it
+> genuinely isn't there.
+
 ## Quirks discovered (read before touching `lib/ninja-api.js`)
 
 These are not guesses — each was hit as a real bug while building the client and confirmed by direct

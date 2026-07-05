@@ -4,14 +4,15 @@ Cross-platform (Windows, macOS, Linux) desktop client for [poe.ninja](https://po
 
 ## Features
 
-- **Game Switcher** — toggle between POE 1 (emerald) and POE 2 (amber) contexts; persists across sessions. POE 2 is the default/priority game.
-- **Live Category Sidebar** — a permanent left-hand nav (mirroring poe.ninja's own economy-page sidebar), sourced from a committed per-game category list and refined by a live scrape in the background — PoE leagues add/remove economy categories every few months. Click a category to see its full item list immediately, auto-fetching it first if needed.
+- **Game Switcher** — toggle between POE 1 and POE 2 contexts; persists across sessions. POE 2 is the default/priority game. Two themes available (Settings → Theme): Ledger (default) and Classic.
+- **Live Category Sidebar** — a permanent left-hand nav (mirroring poe.ninja's own economy-page sidebar), sourced from a committed per-game category list and refined by a live scrape in the background — PoE leagues add/remove economy categories every few months. Super categories (All Uniques, All Gems, etc., plus a "Search All" that merges everything) sit on top, individual categories below. Click a category to see its full item list immediately, auto-fetching it first if needed.
+- **Item-Description Tooltips** — hover an item's name to see its PoE-style description (base type, level requirement, mods, flavor text), for uniques, gems, and currency-type items alike. Base type is also always shown under the name, so same-named variants are distinguishable at a glance.
 - **Active Game+Leagues** — pick which game+league combos stay updated in the background (Settings → Active leagues), so the app doesn't spend bandwidth refreshing leagues you don't play. Defaults to POE2 · Runes of Aldur (SC).
-- **Unified Search** — single text input searches across currency, uniques, fragments, essences, etc.; 300ms debounce
+- **Unified Search** — single text input searches across currency, uniques, fragments, essences, etc.; 300ms debounce; the search bar always shows which category/super-category you're currently in
 - **Keyboard Navigation** — ArrowUp/Down to move through results, Enter opens the item on poe.ninja in your system browser
 - **Background Data Fetching** — poe.ninja's own JSON API, cached locally; auto-refreshes every 12 hours for active leagues
 - **Favorites, Price Alerts, Fuzzy Search** — pin items, get a native OS notification when a price crosses a threshold, and typo-tolerant search fallback
-- **Auto-update** — packaged builds check GitHub Releases for updates (Windows/Linux; see [Signing](#signing--macos-auto-update) for macOS)
+- **Auto-update** — packaged builds check GitHub Releases for updates at startup and every 4 hours after (Windows/Linux; see [Signing](#signing--macos-auto-update) for macOS)
 
 ## Download
 
@@ -79,6 +80,12 @@ npm test
 - To regenerate the committed category map (e.g. at the start of a new PoE league), unset
   `ELECTRON_RUN_AS_NODE` and run `npm run generate-categories`, then commit the updated
   `lib/categories.js`.
+- **Item descriptions** (for the hover tooltip + base-type line) are a separate data source from
+  the price API — currency-type categories have no description text in any JSON endpoint at all,
+  so `data/item-descriptions.json` is scraped once from poe.ninja's own site by
+  `npx electron scripts/discover-currency-descriptions.js` (unset `ELECTRON_RUN_AS_NODE` first) and
+  committed. Re-run it if a category is missing tooltip text that poe.ninja's own site does show
+  (e.g. after a patch adds new currency-type items).
 
 ## Releasing
 

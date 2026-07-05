@@ -1,11 +1,12 @@
 /**
- * One-time asset generator — writes a small 32x32 tray icon PNG by hand-building the raw
- * pixel/PNG chunk data (no external image tools needed). Amber-accented to match the POE2
- * theme, with a dark border for visibility against both light and dark taskbars.
+ * OBSOLETE — do not run. `assets/tray-icon.png` is now a resized derivative of the real app icon
+ * (`assets/ninja-quick-icon.png`); this script hand-builds the old plain-amber-square placeholder
+ * it replaced and would silently overwrite the real tray icon if run again. Kept only for history;
+ * to regenerate the tray icon, resize the real master icon instead (see AGENTS.md's "App icon &
+ * system tray" section).
  *
- * Run: node scripts/generate-tray-icon.js
- * Output: assets/tray-icon.png (committed — this script doesn't need to run again unless the
- * icon design changes).
+ * (Original doc, for reference: one-time asset generator that wrote a small 32x32 tray icon PNG by
+ * hand-building raw pixel/PNG chunk data, amber-accented to match the old POE2 theme.)
  */
 const fs = require('fs');
 const path = require('path');
