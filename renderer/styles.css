@@ -561,11 +561,11 @@ body {
    for a pinned favorite — the one deliberate rarity-adjacent accent in this app, used only here. */
 .item-row {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 2px;
   padding: 6px 12px 6px 10px;
   border-left: 2px solid transparent;
   border-radius: 0 var(--radius) var(--radius) 0;
-  gap: 8px;
   transition: background var(--transition), border-color var(--transition);
   cursor: default;
   overflow: hidden;
@@ -584,6 +584,21 @@ body {
   background: var(--bg-tertiary);
   outline: 1px solid var(--gold);
   outline-offset: -1px;
+}
+
+.item-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.item-basetype {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .item-name {

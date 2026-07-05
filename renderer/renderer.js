@@ -557,13 +557,16 @@ function buildItemRow(item, category, query, rates) {
   const hasAlert = !!existingAlert && existingAlert.enabled !== false;
 
   row.innerHTML = `
-    <span class="item-name">${displayName}</span>
-    ${sparkline}
-    ${displayValue ? `<span class="item-value">${escapeHtml(displayValue)}</span>` : ''}
-    ${item.changePercent ? `<span class="item-change ${changeClass}">${escapeHtml(item.changePercent)}</span>` : ''}
-    <button class="item-favorite ${isFavorite ? 'active' : ''}" title="Pin to favorites">${isFavorite ? '★' : '☆'}</button>
-    <button class="item-alert ${hasAlert ? 'active' : ''}" title="Set a price alert">🔔</button>
-    <button class="item-copy" title="Copy item name">⧉</button>
+    <div class="item-row-main">
+      <span class="item-name">${displayName}</span>
+      ${sparkline}
+      ${displayValue ? `<span class="item-value">${escapeHtml(displayValue)}</span>` : ''}
+      ${item.changePercent ? `<span class="item-change ${changeClass}">${escapeHtml(item.changePercent)}</span>` : ''}
+      <button class="item-favorite ${isFavorite ? 'active' : ''}" title="Pin to favorites">${isFavorite ? '★' : '☆'}</button>
+      <button class="item-alert ${hasAlert ? 'active' : ''}" title="Set a price alert">🔔</button>
+      <button class="item-copy" title="Copy item name">⧉</button>
+    </div>
+    ${item.description && item.description.baseType ? `<span class="item-basetype">${escapeHtml(item.description.baseType)}</span>` : ''}
   `;
 
   row.addEventListener('click', () => openInPoeNinjaCategory(category, item.name));
