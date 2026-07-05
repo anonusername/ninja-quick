@@ -157,6 +157,10 @@ function createWindow() {
     minWidth: 560,
     minHeight: 500,
     titleBarStyle: 'default',
+    // The packaged app gets its taskbar/dock icon for free from the exe's embedded resource
+    // (set via package.json's build.win/mac/linux.icon) — this option is what makes dev mode
+    // (`npx electron . --dev`, unpackaged) show the same icon instead of Electron's default.
+    icon: path.join(__dirname, 'assets/ninja-quick-icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
