@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.15 — 2026-07-05
+
+- **"Search All" super category**: a new entry at the very top of the sidebar merges every item
+  across every category into one searchable view.
+- **Sidebar reordered**: super categories (All Uniques, All Gems, Search All, etc.) now render
+  above individual categories, the reverse of the previous order.
+- **Search bar always shows what you're viewing**: the placeholder now leads with the current
+  category or super-category name in every state, including after deselecting or switching games
+  (previously fell back to a bare "Search POE 2 items..." message with no category shown).
+- **Periodic auto-update check**: the app now re-checks GitHub Releases every 4 hours while open,
+  not just once at startup, so a long-running instance still notices a new release.
+- **New app icon**: replaced with an updated star-only design (transparent background, cropped and
+  centered).
+
 ## 1.0.14 — 2026-07-05
 
 - **New app/tray icon**: replaced the placeholder icon with the new badge design, with a
