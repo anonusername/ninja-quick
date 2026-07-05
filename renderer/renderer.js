@@ -17,7 +17,10 @@ let categoryRefreshing = {};     // categorySlug -> true while a per-category re
 let refreshIntervalMs = 12 * 60 * 60 * 1000;    // default 12 hours (user-configurable)
 let zoomFactor = 1;              // UI scale (Settings) — see applyZoomFactor
 let currentTheme = 'ledger';     // 'ledger' | 'classic' — see setTheme
-let categoryScope = null;        // a real category slug, a super-category scope ('__super:<key>'), or null
+// A real category slug or a super-category scope ('__super:<key>') — never null once init/
+// switchGame set it to SEARCH_ALL_SCOPE (defined further down); starts null only because
+// SEARCH_ALL_SCOPE isn't declared yet at this point in the file.
+let categoryScope = null;
 let displayUnit = 'Auto';        // 'Auto' | 'Chaos' | 'Divine' | 'Exalted' — manual currency override
 
 // favorites[game]: Set of "category::name" keys. alerts[game]: [{category,name,threshold,direction,unit,armed}].
@@ -152,6 +155,11 @@ function getFavoriteItems(game) {
 // research, not guessed. All three adjustments are additive/subtractive tweaks to the same one
 // rule, safe for POE2 too since none of those exact slugs exist there.
 const SUPER_CATEGORIES = [
+  // Matches every category — deliberately NOT discovered through renderCategorySidebar's normal
+  // per-category .find() scan (that loop explicitly skips this key), since a catch-all match there
+  // would swallow every other super category before its own match() ever got a chance. Rendered as
+  // its own unconditional entry instead — see renderCategorySidebar.
+  { key: 'search-all', label: 'Search All', match: () => true },
   {
     key: 'all-uniques',
     label: 'All Uniques',
@@ -202,11 +210,25 @@ function superCategoryAppliesToGame(superCat, game) {
 }
 
 const SUPER_SCOPE_PREFIX = '__super:';
+// The universal fallback scope — categoryScope is never null; deselecting a category/super
+// category, or switching games, lands here instead of a bare "nothing selected" state. This is
+// what makes the search bar placeholder always lead with a category/super-category name.
+const SEARCH_ALL_SCOPE = SUPER_SCOPE_PREFIX + 'search-all';
 
 function superCategoryForScope(scope) {
   if (typeof scope !== 'string' || !scope.startsWith(SUPER_SCOPE_PREFIX)) return null;
   const key = scope.slice(SUPER_SCOPE_PREFIX.length);
   return SUPER_CATEGORIES.find((sc) => sc.key === key) || null;
+}
+
+/** The search-bar placeholder text for whatever `categoryScope` currently is — always leads with
+ * the current category or super-category's label. Shared by every place that changes scope so the
+ * wording can't drift between them. */
+function placeholderForScope(scope) {
+  const superCat = superCategoryForScope(scope);
+  if (superCat) return `${superCat.label} — showing all items…`;
+  const label = (liveCategories[currentGame].find((c) => c.slug === scope) || {}).label || formatCategoryName(scope);
+  return `${label} — showing all items…`;
 }
 
 /** Flattens every item across every live category matching a super category's `match()` into
@@ -809,9 +831,10 @@ function buildSuperCategoryGroup(superCat, memberCats, gameData) {
   return group;
 }
 
-/** Ungrouped categories render first, then every super-category group — rather than interleaved
- * wherever a group's first member happens to fall in poe.ninja's own nav order — so the sidebar
- * reads as "individual categories, then the grouped ones" instead of an arbitrary mix. */
+/** "Search All" renders first (standalone, no nested member list — every category is already
+ * visible further down), then every other super-category group, then every ungrouped category
+ * last — so the sidebar reads as "the broad views, then the individual categories" instead of an
+ * arbitrary mix. */
 function renderCategorySidebar() {
   const gameData = cachedData[currentGame] || {};
   const cats = liveCategories[currentGame] || [];
@@ -827,7 +850,11 @@ function renderCategorySidebar() {
   const seenSuperKeys = new Set();
 
   for (const cat of cats) {
-    const superCat = SUPER_CATEGORIES.find((sc) => superCategoryAppliesToGame(sc, currentGame) && sc.match(cat.slug));
+    // 'search-all' is deliberately excluded here — its catch-all match() would otherwise resolve
+    // before any other super category's match() got a chance, swallowing every category into it.
+    const superCat = SUPER_CATEGORIES.find(
+      (sc) => sc.key !== 'search-all' && superCategoryAppliesToGame(sc, currentGame) && sc.match(cat.slug)
+    );
     if (superCat) {
       if (seenSuperKeys.has(superCat.key)) continue; // already queued with the group below
       seenSuperKeys.add(superCat.key);
@@ -837,35 +864,43 @@ function renderCategorySidebar() {
     ungrouped.push(cat);
   }
 
-  for (const cat of ungrouped) categorySidebar.appendChild(buildSidebarItemRow(cat, gameData));
+  const searchAll = SUPER_CATEGORIES.find((sc) => sc.key === 'search-all');
+  categorySidebar.appendChild(buildSuperCategoryGroup(searchAll, [], gameData));
   for (const { superCat, memberCats } of groups) categorySidebar.appendChild(buildSuperCategoryGroup(superCat, memberCats, gameData));
+  for (const cat of ungrouped) categorySidebar.appendChild(buildSidebarItemRow(cat, gameData));
 }
 
 /** Clicking the "All Uniques"-style group header selects the merged super-category view
  * (renderResults handles the '__super:' scope specially). Deliberately does NOT auto-fetch
  * uncached member categories the way selectSidebarCategory does for a single category — that's
  * what the group's own refresh icon is for; a plain click shouldn't surprise-trigger fetching
- * every member category at once. */
+ * every member category at once. Deselecting (clicking the already-active one) falls back to
+ * Search All — except clicking Search All itself, which always (re-)shows its full merged list
+ * rather than toggling: it's the fallback scope, so "already active" doesn't mean "already
+ * showing its list" the way it does for every other super category — passively landing on Search
+ * All (init/game-switch/deselect) shows the Favorites/Recent overview instead (see renderForQuery),
+ * so this click is the only way to actually reach the full list without typing a search. */
 function selectSuperCategory(key) {
   const scope = SUPER_SCOPE_PREFIX + key;
-  categoryScope = categoryScope === scope ? null : scope;
+  if (categoryScope === scope && key !== 'search-all') {
+    categoryScope = SEARCH_ALL_SCOPE;
+  } else {
+    categoryScope = scope;
+  }
   searchInput.value = '';
-  const superCat = SUPER_CATEGORIES.find((sc) => sc.key === key);
-  searchInput.placeholder = categoryScope
-    ? `${superCat.label} — showing all items…`
-    : `Search ${currentGame === 'poe1' ? 'POE 1' : 'POE 2'} items, currency, uniques…`;
+  searchInput.placeholder = placeholderForScope(categoryScope);
   renderCategorySidebar();
   renderResults('');
 }
 
 /** Clicking a sidebar category immediately shows its full item list (like poe.ninja's own nav),
  * fetching it first if it hasn't been loaded yet. Clicking the already-active category again
- * exits category scope back to the overview. */
+ * falls back to Search All rather than a bare "nothing selected" state. */
 async function selectSidebarCategory(slug) {
   if (categoryScope === slug) {
-    categoryScope = null;
+    categoryScope = SEARCH_ALL_SCOPE;
     searchInput.value = '';
-    searchInput.placeholder = `Search ${currentGame === 'poe1' ? 'POE 1' : 'POE 2'} items, currency, uniques…`;
+    searchInput.placeholder = placeholderForScope(categoryScope);
     renderCategorySidebar();
     renderForQuery('');
     return;
@@ -874,7 +909,7 @@ async function selectSidebarCategory(slug) {
   categoryScope = slug;
   searchInput.value = '';
   const label = (liveCategories[currentGame].find((c) => c.slug === slug) || {}).label || formatCategoryName(slug);
-  searchInput.placeholder = `${label} — showing all items…`;
+  searchInput.placeholder = placeholderForScope(categoryScope);
   renderCategorySidebar();
 
   const game = currentGame;
@@ -1010,7 +1045,10 @@ function showUpdateToast() {
  * "search" mean, used from every entry point. */
 function renderForQuery(q) {
   if (q.length === 0) {
-    if (categoryScope) renderResults('');
+    // Search All is the fallback scope, but with an empty query it still shows the Favorites/
+    // Recent Searches overview like before — the merged all-items list only appears once you
+    // actually search or select a real category/other super category.
+    if (categoryScope && categoryScope !== SEARCH_ALL_SCOPE) renderResults('');
     else showOverview();
   } else if (q.length < 2) {
     clearResults();
@@ -1026,7 +1064,6 @@ btnPoe2.addEventListener('click', () => switchGame('poe2'));
 
 function switchGame(game) {
   currentGame = game;
-  categoryScope = null;
   settingsOpen = false;
   localStorage.setItem('ninja_game', game);
   applyGameSwitch(game);
@@ -1071,8 +1108,10 @@ function applyGameSwitch(game) {
   // League selector dropdown
   updateLeagueSelector(game);
 
-  // Update placeholder
-  searchInput.placeholder = `Search ${label} items, currency, uniques…`;
+  // Falls back to Search All rather than a bare "nothing selected" state — covers both call sites
+  // (a genuine game switch and the initial startup render) in one place.
+  categoryScope = SEARCH_ALL_SCOPE;
+  searchInput.placeholder = placeholderForScope(categoryScope);
 }
 
 function updateWindowTitle() {
@@ -1159,7 +1198,7 @@ searchInput.addEventListener('input', () => {
   const q = searchInput.value.trim().toLowerCase();
 
   if (q.length === 0) {
-    if (categoryScope) renderResults('');
+    if (categoryScope && categoryScope !== SEARCH_ALL_SCOPE) renderResults('');
     else showOverview();
     return;
   }
@@ -1607,9 +1646,12 @@ function renderSettings() {
 }
 
 // The category-by-category browsing list this used to render is now the permanent left sidebar
-// (see renderCategorySidebar) — the overview keeps only Favorites + Recent searches.
+// (see renderCategorySidebar) — the overview keeps only Favorites + Recent searches. Runs with
+// Search All as the active scope (never null — see SEARCH_ALL_SCOPE) so the sidebar highlight and
+// search-bar placeholder stay correct; it's renderForQuery's empty-query branch that decides to
+// show this overview instead of Search All's full merged list, not categoryScope itself.
 function showOverview() {
-  categoryScope = null;
+  categoryScope = SEARCH_ALL_SCOPE;
   renderCategorySidebar();
   const gameData = cachedData[currentGame] || {};
   const hasAnyData = categoryEntries(gameData).some(([, entry]) => entry && Array.isArray(entry.items) && entry.items.length > 0);
