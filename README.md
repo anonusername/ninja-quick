@@ -4,7 +4,7 @@ Cross-platform (Windows, macOS, Linux) desktop client for [poe.ninja](https://po
 
 ## Features
 
-- **Game Switcher** — toggle between POE 1 and POE 2 contexts; persists across sessions. POE 2 is the default/priority game. Two themes available (Settings → Theme): Ledger (default) and Classic.
+- **Game Switcher** — toggle between POE 1 and POE 2 contexts; persists across sessions. POE 2 is the default/priority game. Several themes available (Settings → Theme), Ledger by default.
 - **Live Category Sidebar** — a permanent left-hand nav (mirroring poe.ninja's own economy-page sidebar), sourced from a committed per-game category list and refined by a live scrape in the background — PoE leagues add/remove economy categories every few months. Super categories (All Uniques, All Gems, etc., plus a "Search All" that merges everything) sit on top, individual categories below. Click a category to see its full item list immediately, auto-fetching it first if needed.
 - **Item-Description Tooltips** — hover an item's name to see its PoE-style description (base type, level requirement, mods, flavor text), for uniques, gems, and currency-type items alike. Base type is also always shown under the name, so same-named variants are distinguishable at a glance.
 - **Active Game+Leagues** — pick which game+league combos stay updated in the background (Settings → Active leagues), so the app doesn't spend bandwidth refreshing leagues you don't play. Defaults to POE2 · Runes of Aldur (SC).

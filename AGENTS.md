@@ -16,7 +16,7 @@ The poe.ninja site uses URL-based game context:
 - POE 1 URLs: `https://poe.ninja/poe1/...`
 - POE 2 URLs: `https://poe.ninja/poe2/...`
 
-The switcher toggles the base path segment (`poe1` ↔ `poe2`). All search queries and navigation should respect the active game context. Two visual themes are available (Settings → Theme): **Ledger** (default — gold/ember/steel/violet palette drawn from PoE's own material world) and **Classic** (the original emerald/amber accents, colors only). Each theme still distinguishes POE 1/POE 2 with its own accent color, read live from CSS custom properties (`--accent`, set per game in `applyThemeColors`), not hardcoded in JS.
+The switcher toggles the base path segment (`poe1` ↔ `poe2`). All search queries and navigation should respect the active game context. Several visual themes are available (Settings → Theme) — see the `THEMES` array in `renderer/renderer.js` and the matching `:root[data-theme="..."]` blocks in `renderer/styles.css` for the current list; **Ledger** (gold/ember/steel/violet, drawn from PoE's own material world) is the default. Each theme still distinguishes POE 1/POE 2 with its own accent color, read live from CSS custom properties (`--accent`, set per game in `applyThemeColors`), not hardcoded in JS.
 
 ### Search Behavior
 
@@ -176,7 +176,7 @@ already in `node_modules` instead of running `npm ci` first.
 | `preload.js` | Secure IPC bridge — exposes `ninjaApi.getCachedData()`, `getLiveCategories()`, `getLeagues()`, `startFetch()`, `fetchCategory()`, `openExternal()`, `setZoomFactor()`, `clearCache()`, `setHotkeyEnabled()`, `onFetchProgress()`, `onUpdateDownloaded()`, `restartToUpdate()` to renderer |
 | `renderer/index.html` | Game switcher (2 tabs, POE 2 active by default), active label, search input + refresh/settings buttons, category sidebar + results area side by side |
 | `renderer/renderer.js` | Pure browser-side logic — game switching, category sidebar (incl. per-row force-refresh icon for unpopulated categories), 300ms debounced search, favorites, price alerts, settings panel, fuzzy search fallback, keyboard navigation |
-| `renderer/styles.css` | Ledger theme (default, PoE-material palette) + Classic theme (original emerald/amber); active tab gets glow effect; focused rows get accent outline |
+| `renderer/styles.css` | Ledger theme (default, PoE-material palette) plus several other selectable themes, colors only; active tab gets glow effect; focused rows get accent outline |
 | `data/item-descriptions.json` | Committed static item-description data for currency-type categories (see "Item-description tooltips" above) — regenerate with `scripts/discover-currency-descriptions.js` |
 | `CHANGELOG.md` | Version history; updated alongside every `package.json` version bump, before tagging |
 | `.github/workflows/release.yml` | Tag-triggered CI: runs tests, then builds/publishes Windows/macOS/Linux via `electron-builder` |

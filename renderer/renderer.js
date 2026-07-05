@@ -58,6 +58,11 @@ const THEMES = [
   { key: 'ledger', label: 'Ledger (default)' },
   { key: 'classic', label: 'Classic' },
   { key: 'hotdogstand', label: 'Hotdog Stand' },
+  { key: 'darkmode', label: 'Dark Mode' },
+  { key: 'xboxentreesixty', label: 'Xboxen TreeSixty' },
+  { key: 'theduke', label: 'The Duke' },
+  { key: 'funstation256', label: 'Funstation 256' },
+  { key: 'oldfruit', label: 'Old Fruit' },
 ];
 const THEME_KEYS = new Set(THEMES.map((t) => t.key));
 
