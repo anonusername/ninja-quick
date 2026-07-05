@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.12 — 2026-07-05
+
+- **Base type always shown**: uniques/gems that share a display name (e.g. two "Temporalis" rows
+  in POE2 Unique Armours) now show their base type on a muted line below the name in every list,
+  not just in the hover tooltip — duplicates are distinguishable at a glance instead of requiring
+  a hover. Currency-type rows are unaffected.
+
 ## 1.0.11 — 2026-07-05
 
 - **Item-description tooltip**: hovering any item row now shows its PoE-style description (base
