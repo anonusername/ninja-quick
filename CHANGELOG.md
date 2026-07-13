@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.0 — 2026-07-13
+## 1.1.1 — 2026-07-13
 
 - **Mechanic Rewards — group/merge toggle**: a new "Merge into one list" toggle collapses every
   checked mechanic's drops into one long, value-sorted list, with each row tagged by its mechanic so
