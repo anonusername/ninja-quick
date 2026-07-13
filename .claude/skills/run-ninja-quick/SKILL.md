@@ -76,6 +76,18 @@ npx electron . --dev   # opens a real window with DevTools; Ctrl-C to quit
   `app`/`net`/`BrowserWindow` come back `undefined` or the process never becomes a real GUI
   process. Always `unset ELECTRON_RUN_AS_NODE` before `launch`.
 
+- **Single-instance lock — `launch` fails when the user's packaged app is running.** The app calls
+  `requestSingleInstanceLock()` and quits immediately (exit 0, no window) if another instance holds
+  it. The user commonly has the **packaged ninja-quick in the system tray**, which holds it — so a
+  dev `launch` exits in ~3s and Playwright reports `firstWindow: Target page … closed` (windows=0).
+  Don't kill the user's app. Launch the dev instance with its own profile so it gets a separate lock
+  namespace — the driver passes `args:[APP_DIR]`, so run a one-off Playwright script (in the repo, so
+  `node_modules` resolves) with `args:['.', '--user-data-dir=C:/tmp/ninja-dev-profile']` instead.
+  To get real prices in that throwaway profile, copy `%APPDATA%/ninja-quick/.cache` into
+  `C:/tmp/ninja-dev-profile/.cache` first; delete the profile afterward (it holds a copy of the
+  user's cache). Note the sidebar (and the POE2-only "⚔ Mechanic Rewards" entry) only renders once
+  the live category scrape populates it — poll for your selector for ~30-60s on a fresh profile.
+
 - **`--dev` docks DevTools inside the same window and shrinks the real content viewport.**
   The app's window is only 480px wide (`main.js`'s `BrowserWindow({width: 480, ...})`). Opening
   DevTools with `webContents.openDevTools()` (what `--dev` does) docks it inside that same

@@ -7,6 +7,7 @@ Cross-platform (Windows, macOS, Linux) desktop client for [poe.ninja](https://po
 - **Game Switcher** — toggle between POE 1 and POE 2 contexts; persists across sessions. POE 2 is the default/priority game. Several themes available (Settings → Theme), Ledger by default.
 - **Live Category Sidebar** — a permanent left-hand nav (mirroring poe.ninja's own economy-page sidebar), sourced from a committed per-game category list and refined by a live scrape in the background — PoE leagues add/remove economy categories every few months. Super categories (All Uniques, All Gems, etc., plus a "Search All" that merges everything) sit on top, individual categories below. Click a category to see its full item list immediately, auto-fetching it first if needed.
 - **Item-Description Tooltips** — hover an item's name to see its PoE-style description (base type, level requirement, mods, flavor text), for uniques, gems, and currency-type items alike. Base type is also always shown under the name, so same-named variants are distinguishable at a glance.
+- **Mechanic Rewards (POE2)** — a "⚔ Mechanic Rewards" view (top of the POE2 sidebar) that multi-selects endgame mechanics (checkbox per mechanic + Select all / none) and, for each, lists its tradeable consumable drops and its mechanic-boss / pinnacle-boss / encounter-locked uniques (tagged with the source NPC/encounter), ranked by top single-drop value. A "Mechanic Consumables" filter flattens every checked mechanic's consumables into one price-sorted list. The ranking is an explicit market-price heuristic (poe.ninja has no drop rates) and runs against already-cached data, so it makes no extra requests.
 - **Active Game+Leagues** — pick which game+league combos stay updated in the background (Settings → Active leagues), so the app doesn't spend bandwidth refreshing leagues you don't play. Defaults to POE2 · Runes of Aldur (SC).
 - **Unified Search** — single text input searches across currency, uniques, fragments, essences, etc.; 300ms debounce; the search bar always shows which category/super-category you're currently in
 - **Keyboard Navigation** — ArrowUp/Down to move through results, Enter opens the item on poe.ninja in your system browser
@@ -86,6 +87,10 @@ npm test
   `npx electron scripts/discover-currency-descriptions.js` (unset `ELECTRON_RUN_AS_NODE` first) and
   committed. Re-run it if a category is missing tooltip text that poe.ninja's own site does show
   (e.g. after a patch adds new currency-type items).
+- **Mechanic Rewards data** (which POE2 mechanic drops what) is a third committed, hand-verified
+  dataset, `data/mechanic-drops.json` — seeded from poe2wiki.net's Cargo API by
+  `npx electron scripts/discover-mechanic-drops.js` (unset `ELECTRON_RUN_AS_NODE` first) and curated
+  by hand. Re-run + re-verify at the start of a new POE2 league, when GGG adds mechanics/uniques.
 
 ## Releasing
 
