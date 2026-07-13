@@ -1,0 +1,127 @@
+{
+  "_note": "POE2 endgame-mechanic reward map for the Mechanic Rewards view. HAND-VERIFIED from the poe2wiki.net Cargo `drop_text` seed (scripts/discover-mechanic-drops.js -> data/mechanic-drops.candidate.json) plus community boss<->mechanic confirmation. `uniques` lists come straight from the wiki's per-item drop_text (only mechanic/boss/encounter-LOCKED drops; world drops like Mageblood are intentionally absent). `consumables[].category` slugs must exist in lib/categories.js's POE2 list. `ids` (subset of a shared category) may only be used on exchange-family categories whose ids are stable slugs; the unique-* (stash) categories have unstable per-league numeric ids, so their drops are expressed as source `uniques` matched by name instead. Re-run the seed script + re-verify at each new POE2 league.",
+  "poe2": {
+    "breach": {
+      "label": "Breach",
+      "consumables": [{ "category": "breach-catalyst" }],
+      "sources": [
+        {
+          "name": "Xesht, We That Are One",
+          "kind": "pinnacle-boss",
+          "uniques": [
+            "Beyond Reach",
+            "Choir of the Storm",
+            "Controlled Metamorphosis",
+            "Hand of Wisdom and Action",
+            "Skin of the Loyal",
+            "The Pandemonius",
+            "Xoph's Blood"
+          ]
+        }
+      ]
+    },
+    "ritual": {
+      "label": "Ritual",
+      "consumables": [{ "category": "omens" }],
+      "sources": [
+        {
+          "name": "The King in the Mists",
+          "kind": "pinnacle-boss",
+          "uniques": ["Beetlebite", "From Nothing", "Ingenuity", "Pragmatism", "The Burden of Shadows"]
+        }
+      ]
+    },
+    "delirium": {
+      "label": "Delirium",
+      "consumables": [{ "category": "liquid-emotions" }],
+      "sources": [
+        {
+          "name": "Simulacrum",
+          "kind": "encounter",
+          "uniques": [
+            "Assailum",
+            "Collapsing Horizon",
+            "Megalomaniac",
+            "Melting Maelstrom",
+            "Perfidy",
+            "Strugglescream",
+            "Voices"
+          ]
+        }
+      ]
+    },
+    "expedition": {
+      "label": "Expedition",
+      "consumables": [{ "category": "expedition" }],
+      "sources": [
+        {
+          "name": "Olroth, Origin of the Fall",
+          "kind": "pinnacle-boss",
+          "uniques": ["Heroic Tragedy", "Keeper of the Arc", "Olroth's Resolve", "Olrovasara", "Svalinn"]
+        },
+        {
+          "name": "Vessel of Kulemak",
+          "kind": "mechanic-boss",
+          "uniques": ["Darkness Enthroned", "Grip of Kulemak", "The Master's Reach", "The Unborn Lich", "Undying Hate"]
+        }
+      ]
+    },
+    "abyss": {
+      "label": "Abyss",
+      "consumables": [{ "category": "abyssal-bones" }],
+      "sources": [{ "name": "Abyss", "kind": "mechanic-boss", "uniques": ["Heart of the Well"] }]
+    },
+    "essence": {
+      "label": "Essence",
+      "consumables": [{ "category": "essences" }],
+      "sources": []
+    },
+    "sekhemas": {
+      "label": "Trial of the Sekhemas",
+      "consumables": [],
+      "sources": [
+        {
+          "name": "Zarokh, the Eternal",
+          "kind": "pinnacle-boss",
+          "uniques": [
+            "Against the Darkness",
+            "Blessed Bonds",
+            "Eshtera's Path",
+            "Safrin's Resolve",
+            "Sandstorm Visage",
+            "Temporalis",
+            "The Burden of Leadership",
+            "The Changing Seasons",
+            "The Desperate Alliance",
+            "The Last Flame",
+            "The Peacemaker's Draught",
+            "The Remembered Tales",
+            "Zaida's Longevity"
+          ]
+        }
+      ]
+    },
+    "chaos-trial": {
+      "label": "Trial of Chaos",
+      "consumables": [],
+      "sources": [
+        {
+          "name": "The Trialmaster",
+          "kind": "pinnacle-boss",
+          "uniques": ["Glimpse of Chaos", "Hateforge", "Mahuxotl's Machination", "The Adorned", "Zerphi's Genesis"]
+        }
+      ]
+    },
+    "arbiter": {
+      "label": "The Arbiter of Ash",
+      "consumables": [],
+      "sources": [
+        {
+          "name": "The Arbiter of Ash",
+          "kind": "pinnacle-boss",
+          "uniques": ["Ab Aeterno", "Morior Invictus", "Prism of Belief", "Sacred Flame", "Sine Aequo", "Solus Ipse"]
+        }
+      ]
+    }
+  }
+}

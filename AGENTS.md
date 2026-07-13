@@ -78,6 +78,38 @@ Two very different data sources feed this, handled in `lib/ninja-api.js`'s `extr
   graceful, expected gap (confirmed against poe.ninja's own site: some categories, like Djinn Coins
   or Skill Gems, genuinely show no description there either).
 
+### Mechanic Rewards (POE2)
+
+A POE2-only view (sidebar entry "⚔ Mechanic Rewards", a **multi-select** mode distinct from the
+single-select `categoryScope` — checkbox per mechanic + Select All/None + a "Mechanic Consumables"
+aggregate toggle) answering *"which endgame mechanic is worth farming, and what drops from it?"*. It
+lists each mechanic's tradeable **consumable** categories plus its mechanic-boss / pinnacle-boss /
+encounter-**locked** uniques (world drops like Mageblood are intentionally excluded), and ranks
+mechanics by **top single-drop value** — the most expensive locked drop in the pool, normalized to
+the league's primary currency.
+
+**That ranking is an explicit MARKET-PRICE heuristic, not expected value** — poe.ninja publishes no
+drop rates, so the UI labels it *"top single-drop value (market price, not drop rate)"*. Don't
+"improve" it into a fake expected-value number.
+
+- **Data**: `data/mechanic-drops.json` (committed, hand-verified), keyed game → mechanic →
+  `{ label, consumables: [{category, ids?}], sources: [{name, kind, uniques[]}] }`.
+  `kind ∈ pinnacle-boss | mechanic-boss | encounter`. `consumables[].category` is a poe.ninja slug
+  (must exist in `lib/categories.js`); a bare `{category}` means the whole category, `{category, ids}`
+  restricts to specific rows and is **only valid for exchange-family categories** — their ids are
+  stable slugs; `unique-*` (stash) categories have unstable per-league numeric ids, so their drops
+  are expressed as source `uniques` matched by **name** instead.
+- **Ranking lives in the renderer** (`renderer/renderer.js`'s Mechanic Rewards block), joining the
+  static map against already-cached economy data + `__meta.rates` via `convertAmount` — **no extra
+  poe.ninja request**. Cached rows carry `id` (added to `normalizeRow`) for the consumable id-subset
+  filter; older caches predating that field degrade gracefully to whole-category.
+- **Seeding**: `scripts/discover-mechanic-drops.js` queries poe2wiki.net's Cargo API
+  (`action=cargoquery`, the `items.drop_text` field — the only structured "locked-drop" signal;
+  poedb.tw has no JSON API) into `data/mechanic-drops.candidate.json`. That candidate is **noisy**
+  (drop_text carries HTML hoverbox markup, and items whose mod text embeds wikilinks over-produce
+  bogus "sources") — it is hand-verified into the committed file, never shipped raw. Like
+  `lib/categories.js`, **re-run + re-verify at each new POE2 league** (GGG adds mechanics/uniques).
+
 ### Category Data: committed baseline + live discovery layered on top
 
 `lib/categories.js` ships a **committed, curated category map per game** — the source of truth on
@@ -178,12 +210,15 @@ already in `node_modules` instead of running `npm ci` first.
 | `renderer/renderer.js` | Pure browser-side logic — game switching, category sidebar (incl. per-row force-refresh icon for unpopulated categories), 300ms debounced search, favorites, price alerts, settings panel, fuzzy search fallback, keyboard navigation |
 | `renderer/styles.css` | Ledger theme (default, PoE-material palette) plus several other selectable themes, colors only; active tab gets glow effect; focused rows get accent outline |
 | `data/item-descriptions.json` | Committed static item-description data for currency-type categories (see "Item-description tooltips" above) — regenerate with `scripts/discover-currency-descriptions.js` |
+| `lib/mechanic-drops.js` | Loader for the committed mechanic→drops map (Mechanic Rewards view); reads `data/mechanic-drops.json` at require-time, served to the renderer via main.js's `get-mechanic-map` IPC |
+| `data/mechanic-drops.json` | Committed, hand-verified POE2 mechanic→drops map (see "Mechanic Rewards" below) — re-seed with `scripts/discover-mechanic-drops.js` |
 | `CHANGELOG.md` | Version history; updated alongside every `package.json` version bump, before tagging |
 | `.github/workflows/release.yml` | Tag-triggered CI: runs tests, then builds/publishes Windows/macOS/Linux via `electron-builder` |
 | `build-windows-release.ps1` | Local-only Windows build helper (see "Releasing" above) |
 | `scripts/discover-api.js` | Re-discovers poe.ninja's live economy-data API and regenerates `docs/api-endpoints.md` — run this if data goes empty |
 | `scripts/discover-currency-descriptions.js` | Re-scrapes currency-type item descriptions into `data/item-descriptions.json` — run after a GGG patch adds new currency-type items, or if a category is missing tooltip text that poe.ninja's own site does show |
-| `test-integration.js` | Integration tests against the live API — league detection, category fetch, cache round-trip, search simulation |
+| `scripts/discover-mechanic-drops.js` | Seeds `data/mechanic-drops.candidate.json` from poe2wiki.net's Cargo API (`drop_text` field) — re-run + re-verify into `data/mechanic-drops.json` at each new POE2 league |
+| `test-integration.js` | Integration tests against the live API — league detection, category fetch, cache round-trip, search simulation, plus offline Mechanic Rewards data/ranking checks |
 
 ### App icon & system tray
 

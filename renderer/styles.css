@@ -91,6 +91,9 @@
   --favorite: #a98fdb;
   --alert: #4fbdba;
   --alert-glow: rgba(79, 189, 186, 0.3);
+
+  --supercategory-border: #4f7d9e;
+  --supercategory-glow: rgba(127, 168, 201, 0.3);
 }
 
 /* "classic" — the original pre-redesign palette (coolgrey + emerald/amber), colors only; keeps
@@ -129,6 +132,9 @@
   --favorite: var(--accent);
   --alert: #f59e0b;
   --alert-glow: rgba(245, 158, 11, 0.3);
+
+  --supercategory-border: #5c6bc0;
+  --supercategory-glow: rgba(92, 107, 192, 0.3);
 }
 
 /* "Hotdog Stand" — an infamous, deliberately garish high-contrast color scheme from computing
@@ -171,6 +177,7 @@
      the shared selectors below so Ledger/Classic don't need any change at all. */
   --sidebar-item-border: #000000;
   --supercategory-border: #000000;
+  --supercategory-glow: rgba(0, 0, 0, 0.3);
 }
 
 /* "Dark Mode" — no thematic gimmick, just a plain, quiet neutral-gray dark theme for people who
@@ -206,76 +213,87 @@
   --favorite: #bc8cff;
   --alert: #3fb950;
   --alert-glow: rgba(63, 185, 80, 0.3);
+
+  --supercategory-border: #3b82f6;
+  --supercategory-glow: rgba(88, 166, 255, 0.3);
 }
 
-/* "Xboxen TreeSixty" — a black dashboard field with a glowing lime-green ring highlight and a
-   cyan secondary glow, plus a warm gold accent for currency (an achievement-banner nod). */
+/* A green-gradient dashboard field fading into a grey-to-near-black corner, with the brightest
+   yellow-green reserved for the active highlight and dividers — every color here is sampled
+   directly from a reference screenshot of the real dashboard, not approximated from memory. */
 :root[data-theme="xboxentreesixty"] {
-  --bg-primary: #0b0b0b;
-  --bg-secondary: #141414;
-  --bg-tertiary: #1c1c1c;
-  --coolgrey-600: #545454;
-  --coolgrey-700: #2a2a2a;
-  --coolgrey-800: #1c1c1c;
-  --coolgrey-900: #0b0b0b;
+  --bg-primary: #313630;
+  --bg-secondary: #3b403a;
+  --bg-tertiary: #55585f;
+  --coolgrey-600: #7c9286;
+  --coolgrey-700: #606e5f;
+  --coolgrey-800: #3b403a;
+  --coolgrey-900: #313630;
 
   --text-primary: #ffffff;
-  --text-secondary: #c9c9c9;
-  --text-muted: #8a8a8a;
+  --text-secondary: #d3e0aa;
+  --text-muted: #77877a;
 
-  --poe1-accent: #9bec4c;
-  --poe1-glow: rgba(155, 236, 76, 0.4);
-  --poe1-divider-glow: rgba(155, 236, 76, 0.6);
+  --poe1-accent: #a8e01f;
+  --poe1-glow: rgba(168, 224, 31, 0.4);
+  --poe1-divider-glow: rgba(168, 224, 31, 0.6);
 
-  --poe2-accent: #5fd0e8;
-  --poe2-glow: rgba(95, 208, 232, 0.4);
-  --poe2-divider-glow: rgba(95, 208, 232, 0.6);
+  --poe2-accent: #606e5f;
+  --poe2-glow: rgba(96, 110, 95, 0.4);
+  --poe2-divider-glow: rgba(96, 110, 95, 0.6);
 
   --accent: var(--poe1-accent);
   --glow: var(--poe1-glow);
 
-  --gold: #f2c94c;
-  --gold-glow: rgba(242, 201, 76, 0.35);
-  --danger: #e5493f;
-  --danger-glow: rgba(229, 73, 63, 0.3);
-  --favorite: #c792ea;
-  --alert: #3fd0c9;
-  --alert-glow: rgba(63, 208, 201, 0.3);
+  --gold: #d3e0aa;
+  --gold-glow: rgba(211, 224, 170, 0.3);
+  --danger: #2b3b16;
+  --danger-glow: rgba(43, 59, 22, 0.35);
+  --favorite: #c7f230;
+  --alert: #7c9286;
+  --alert-glow: rgba(124, 146, 134, 0.3);
+
+  --supercategory-border: #77877a;
+  --supercategory-glow: rgba(119, 135, 122, 0.3);
 }
 
-/* "The Duke" — an older, chunkier sibling: darker and more matte, deep olive-green on near-black
-   instead of a bright lime glow, with a dull brass gold for currency. */
+/* "The Duke" — built around exactly two colors: a bright neon-green glow against a near-total
+   black field, no other hue competing for attention; a warm brass gold is the one deliberate
+   exception, reserved for currency exactly like every other theme. */
 :root[data-theme="theduke"] {
-  --bg-primary: #0e1210;
-  --bg-secondary: #171d19;
-  --bg-tertiary: #202824;
-  --coolgrey-600: #4c5549;
-  --coolgrey-700: #2a3128;
-  --coolgrey-800: #202824;
-  --coolgrey-900: #0e1210;
+  --bg-primary: #060806;
+  --bg-secondary: #0d120d;
+  --bg-tertiary: #141a14;
+  --coolgrey-600: #3c4a3c;
+  --coolgrey-700: #202920;
+  --coolgrey-800: #141a14;
+  --coolgrey-900: #060806;
 
-  --text-primary: #eef0ea;
-  --text-secondary: #a9b3a3;
-  --text-muted: #6f796b;
+  --text-primary: #eafbe6;
+  --text-secondary: #9fcf9a;
+  --text-muted: #5c6e5c;
 
-  --poe1-accent: #4c8a26;
-  --poe1-glow: rgba(76, 138, 38, 0.4);
-  --poe1-divider-glow: rgba(76, 138, 38, 0.6);
+  --poe1-accent: #39ff14;
+  --poe1-glow: rgba(57, 255, 20, 0.4);
+  --poe1-divider-glow: rgba(57, 255, 20, 0.6);
 
-  --poe2-accent: #97a186;
-  --poe2-glow: rgba(151, 161, 134, 0.4);
-  --poe2-divider-glow: rgba(151, 161, 134, 0.6);
+  --poe2-accent: #1f8a3a;
+  --poe2-glow: rgba(31, 138, 58, 0.4);
+  --poe2-divider-glow: rgba(31, 138, 58, 0.6);
 
   --accent: var(--poe1-accent);
   --glow: var(--poe1-glow);
 
   --gold: #c9a227;
   --gold-glow: rgba(201, 162, 39, 0.3);
-  --danger: #a8402f;
-  --danger-glow: rgba(168, 64, 47, 0.3);
+  --danger: #d23b3b;
+  --danger-glow: rgba(210, 59, 59, 0.3);
   --favorite: #8f7fc0;
   --alert: #4f8f8a;
   --alert-glow: rgba(79, 143, 138, 0.3);
+
+  --supercategory-border: #1f7a2e;
+  --supercategory-glow: rgba(31, 122, 46, 0.3);
 }
 
 /* "Funstation 256" — a deep-sea navy dashboard, bubble-white text, and a warm gold pop for
@@ -311,6 +329,9 @@
   --favorite: #c9a6ff;
   --alert: #4ce0d2;
   --alert-glow: rgba(76, 224, 210, 0.3);
+
+  --supercategory-border: #2a8296;
+  --supercategory-glow: rgba(63, 184, 201, 0.3);
 }
 
 /* "Old Fruit" — the odd one out: a flat, all-gray, LIGHT theme (every other theme here is dark),
@@ -350,7 +371,8 @@
   --alert-glow: rgba(47, 125, 111, 0.25);
 
   --sidebar-item-border: #8a8a8e;
-  --supercategory-border: #6a6a6d;
+  --supercategory-border: #3f6a99;
+  --supercategory-glow: rgba(63, 106, 153, 0.28);
 }
 
 * {
@@ -634,8 +656,8 @@ body {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--gold);
-  background: var(--gold-glow);
+  color: var(--supercategory-border, var(--gold));
+  background: var(--supercategory-glow, var(--gold-glow));
   cursor: pointer;
   border-bottom: 1px solid var(--supercategory-border, var(--gold));
 }
@@ -646,7 +668,7 @@ body {
 
 .sidebar-supercategory-header.active {
   color: var(--text-primary);
-  background: var(--gold);
+  background: var(--supercategory-border, var(--gold));
 }
 
 .sidebar-supercategory-group .sidebar-item {
@@ -1337,4 +1359,116 @@ mark {
   padding: 6px 12px;
   font-weight: 600;
   cursor: pointer;
+}
+
+/* ── Mechanic Rewards view ─────────────────── */
+.mechanics-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 16px 6px;
+}
+
+.mechanics-btn {
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--accent);
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mechanics-btn:hover {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.mechanics-consumables-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.mechanics-note {
+  padding: 0 16px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.mechanics-checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 6px 16px 12px;
+  border-bottom: 1px solid var(--coolgrey-700);
+}
+
+.mechanics-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.mechanics-banner {
+  margin: 8px 16px;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  background: var(--gold-glow, var(--bg-secondary));
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.mechanics-top {
+  margin-left: auto;
+  margin-right: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45%;
+}
+
+.mechanics-subheader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px 2px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.mechanics-kind {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--bg-primary);
+  background: var(--text-muted);
+}
+
+.mechanics-kind.kind-pinnacle-boss {
+  background: var(--accent);
+}
+
+.mechanics-missing {
+  opacity: 0.5;
+}
+
+.mechanics-missing:hover {
+  background: transparent;
 }

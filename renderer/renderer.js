@@ -8,7 +8,7 @@
 let currentGame = 'poe2';       // 'poe1' | 'poe2' — POE2 is the default/priority game
 let detectedLeagues = { poe1: [], poe2: [] };   // [{ slug, displayName, hardcore, indexed }]
 let currentLeague = { poe1: '', poe2: '' };     // stores the league SLUG
-// { categorySlug: { items: [{name,value,changePercent,icon,amount,unit,trend}], fetchedAt },
+// { categorySlug: { items: [{id,name,value,changePercent,icon,amount,unit,trend}], fetchedAt },
 //   __meta: { rates: {primary, rates}, updatedAt } } — scoped to whichever league is
 // currentLeague[game] at the time it was loaded; always reload after switching leagues.
 let cachedData = {};
@@ -221,6 +221,12 @@ const SUPER_SCOPE_PREFIX = '__super:';
 // what makes the search bar placeholder always lead with a category/super-category name.
 const SEARCH_ALL_SCOPE = SUPER_SCOPE_PREFIX + 'search-all';
 
+// The Mechanic Rewards view — a distinct MULTI-select mode (checkbox per mechanic), unlike the
+// single-select category/super-category scopes above. When categoryScope holds this, renderResults
+// delegates to renderMechanicsView. POE2-only (the mechanic map ships for POE2 only). See the
+// "Mechanic Rewards" block further down.
+const MECHANICS_SCOPE = '__mechanics';
+
 function superCategoryForScope(scope) {
   if (typeof scope !== 'string' || !scope.startsWith(SUPER_SCOPE_PREFIX)) return null;
   const key = scope.slice(SUPER_SCOPE_PREFIX.length);
@@ -231,6 +237,7 @@ function superCategoryForScope(scope) {
  * the current category or super-category's label. Shared by every place that changes scope so the
  * wording can't drift between them. */
 function placeholderForScope(scope) {
+  if (scope === MECHANICS_SCOPE) return 'Mechanic Rewards — filter mechanics/drops…';
   const superCat = superCategoryForScope(scope);
   if (superCat) return `${superCat.label} — showing all items…`;
   const label = (liveCategories[currentGame].find((c) => c.slug === scope) || {}).label || formatCategoryName(scope);
@@ -251,6 +258,125 @@ function getSuperCategoryItems(superCat, query) {
   }
   return result;
 }
+
+// ── Mechanic Rewards ────────────────────────
+//
+// A POE2-only view answering "which endgame mechanic is worth farming, and what does it drop?".
+// The mechanic->drops map is a committed static dataset (data/mechanic-drops.json, via the
+// get-mechanic-map IPC) listing, per mechanic: its tradeable consumable categories and its
+// mechanic-boss/pinnacle-boss/encounter-LOCKED uniques (world drops like Mageblood are excluded).
+// Ranking + price joins happen entirely here against already-cached economy data — no extra
+// poe.ninja request (respects the app's request-pacing rules). The ranking metric is "top single
+// locked-drop value" (the most expensive drop in the pool, normalized to the league's primary
+// currency): an explicit MARKET-PRICE heuristic, not a drop-rate/expected-value — poe.ninja
+// publishes no drop rates. The UI labels it as such.
+
+let mechanicMap = {};            // { [key]: { label, consumables, sources } } for POE2, from IPC
+let mechanicMapLoaded = false;
+let mechanicConsumablesMode = false; // "Mechanic Consumables" aggregate toggle
+
+/** Checked mechanic keys (multi-select). Defaults to all mechanics; persisted like favorites. */
+let checkedMechanics = new Set();
+
+function loadCheckedMechanics() {
+  try {
+    const raw = localStorage.getItem('ninja_checked_mechanics');
+    if (raw === null) return null; // never saved — caller applies the "all" default
+    return new Set(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+function saveCheckedMechanics() {
+  localStorage.setItem('ninja_checked_mechanics', JSON.stringify([...checkedMechanics]));
+}
+
+/** Fetch the committed mechanic map once (POE2). Safe to call repeatedly; caches after first load. */
+async function ensureMechanicMap() {
+  if (mechanicMapLoaded) return;
+  try {
+    mechanicMap = (await window.ninjaApi.getMechanicMap('poe2')) || {};
+  } catch (err) {
+    console.error('getMechanicMap failed:', err);
+    mechanicMap = {};
+  }
+  mechanicMapLoaded = true;
+  // First-run default: every mechanic checked. A saved (possibly empty) set is respected as-is.
+  const saved = loadCheckedMechanics();
+  checkedMechanics = saved !== null ? saved : new Set(Object.keys(mechanicMap));
+}
+
+/** Rows for a mechanic's consumables from the cache. `{category}` = whole category; `{category, ids}`
+ * restricts to specific ids — but only exchange-family categories carry stable slug ids, and older
+ * caches predate the `id` field entirely, so if no row in that category has an id we fall back to
+ * the whole category rather than dropping everything. */
+function resolveConsumables(mech, gameData, query) {
+  const out = [];
+  for (const spec of mech.consumables || []) {
+    const entry = gameData[spec.category];
+    if (!entry || !Array.isArray(entry.items)) continue;
+    const hasIds = Array.isArray(spec.ids) && spec.ids.length > 0;
+    const anyRowHasId = entry.items.some((it) => it && it.id != null);
+    for (const item of entry.items) {
+      if (hasIds && anyRowHasId && !spec.ids.includes(item.id)) continue;
+      if (query && !item.name.toLowerCase().includes(query)) continue;
+      out.push({ item, category: spec.category });
+    }
+  }
+  return out;
+}
+
+/** For a source's `uniques` (matched by NAME against unique-* categories): returns
+ * { found: [{item, category}], missing: [name] }. A name can match multiple rows (base-type
+ * variants, e.g. two "Temporalis") — all are returned so the expanded view shows each variant. */
+function resolveSourceUniques(source, gameData, query) {
+  const found = [];
+  const missing = [];
+  for (const name of source.uniques || []) {
+    let any = false;
+    for (const [category, entry] of categoryEntries(gameData)) {
+      if (!category.startsWith('unique-') || !entry || !Array.isArray(entry.items)) continue;
+      for (const item of entry.items) {
+        if (item.name === name) {
+          any = true;
+          if (!query || item.name.toLowerCase().includes(query)) found.push({ item, category });
+        }
+      }
+    }
+    if (!any && (!query || name.toLowerCase().includes(query))) missing.push(name);
+  }
+  return { found, missing };
+}
+
+/** Normalize an item's value to the league's primary currency (best-effort). Falls back to the raw
+ * amount when no rate table / no conversion path is available, so ranking still works pre-rates. */
+function normalizedAmount(item, rates) {
+  if (!item || item.amount === null || item.amount === undefined) return null;
+  if (!rates || !rates.primary) return item.amount;
+  const converted = convertAmount(item.amount, item.unit, rates.primary, rates);
+  return converted === null ? item.amount : converted;
+}
+
+/** The single most valuable locked drop for a mechanic (consumables + source uniques), normalized
+ * to primary currency: { top: {item, category} | null, value: number | null }. */
+function mechanicTopDrop(mech, gameData, rates) {
+  const pool = resolveConsumables(mech, gameData, '');
+  for (const source of mech.sources || []) pool.push(...resolveSourceUniques(source, gameData, '').found);
+  let best = null;
+  let bestVal = null;
+  for (const entry of pool) {
+    const v = normalizedAmount(entry.item, rates);
+    if (v === null) continue;
+    if (bestVal === null || v > bestVal) {
+      bestVal = v;
+      best = entry;
+    }
+  }
+  return { top: best, value: bestVal };
+}
+
+const KIND_LABEL = { 'pinnacle-boss': 'Pinnacle', 'mechanic-boss': 'Boss', encounter: 'Encounter' };
 
 // ── Active Game+Leagues ─────────────────────
 //
@@ -912,10 +1038,45 @@ function renderCategorySidebar() {
     ungrouped.push(cat);
   }
 
+  // Mechanic Rewards — POE2-only standalone entry (like Search All, not a category-matching super
+  // category). Rendered first, above every category/super-category, so it leads the sidebar.
+  if (currentGame === 'poe2') categorySidebar.appendChild(buildMechanicsSidebarEntry());
   const searchAll = SUPER_CATEGORIES.find((sc) => sc.key === 'search-all');
   categorySidebar.appendChild(buildSuperCategoryGroup(searchAll, [], gameData));
   for (const { superCat, memberCats } of groups) categorySidebar.appendChild(buildSuperCategoryGroup(superCat, memberCats, gameData));
   for (const cat of ungrouped) categorySidebar.appendChild(buildSidebarItemRow(cat, gameData));
+}
+
+/** Standalone "⚔ Mechanic Rewards" sidebar entry (POE2 only), styled like a super-category header
+ * but routing to the multi-select Mechanics view instead of a merged category list. */
+function buildMechanicsSidebarEntry() {
+  const header = document.createElement('div');
+  header.className = `sidebar-supercategory-header ${categoryScope === MECHANICS_SCOPE ? 'active' : ''}`;
+  header.innerHTML = `<span class="sidebar-item-label">⚔ Mechanic Rewards</span>`;
+  header.addEventListener('click', selectMechanicsScope);
+  return header;
+}
+
+/** Enter the Mechanic Rewards view (or, if it's already active, toggle back to Search All — the
+ * same click-to-deselect convention every super category uses). */
+function selectMechanicsScope() {
+  if (categoryScope === MECHANICS_SCOPE) {
+    categoryScope = SEARCH_ALL_SCOPE;
+    searchInput.value = '';
+    searchInput.placeholder = placeholderForScope(categoryScope);
+    renderCategorySidebar();
+    renderForQuery('');
+    return;
+  }
+  categoryScope = MECHANICS_SCOPE;
+  searchInput.value = '';
+  searchInput.placeholder = placeholderForScope(categoryScope);
+  renderCategorySidebar();
+  // Map may not have arrived yet on a fast first click — load then (re-)render.
+  ensureMechanicMap().then(() => {
+    if (categoryScope === MECHANICS_SCOPE) renderMechanicsView('');
+  });
+  renderMechanicsView('');
 }
 
 /** Clicking the "All Uniques"-style group header selects the merged super-category view
@@ -1005,6 +1166,7 @@ async function selectSidebarCategory(slug) {
   favorites.poe2 = loadFavorites('poe2');
   alerts.poe1 = loadAlerts('poe1');
   alerts.poe2 = loadAlerts('poe2');
+  await ensureMechanicMap(); // POE2 mechanic->drops map + persisted checkbox state (Mechanic Rewards view)
   notificationsEnabled = localStorage.getItem('ninja_notifications_enabled') !== 'false';
 
   const savedActiveLeagues = loadActiveLeaguesRaw();
@@ -1338,7 +1500,213 @@ function appendShowMoreIfNeeded(itemsDiv, limitKey, total, limit, onExpand) {
   itemsDiv.appendChild(showMoreRow);
 }
 
+/** How many categories the checked mechanics depend on are still unloaded/empty — drives the
+ * "ranking may change" banner, since unique-* categories land late in the ~1h POE2 refresh. */
+function pendingMechanicCategories(gameData) {
+  const needed = new Set();
+  for (const key of checkedMechanics) {
+    const mech = mechanicMap[key];
+    if (!mech) continue;
+    for (const spec of mech.consumables || []) needed.add(spec.category);
+    // A mechanic with boss uniques depends on the unique-* categories those live in.
+    if ((mech.sources || []).some((s) => (s.uniques || []).length > 0)) {
+      for (const [category, entry] of categoryEntries(gameData)) {
+        if (category.startsWith('unique-') && entry && Array.isArray(entry.items) && entry.items.length > 0) needed.delete(category);
+      }
+    }
+  }
+  let pending = 0;
+  for (const cat of needed) {
+    const entry = gameData[cat];
+    if (!entry || !Array.isArray(entry.items) || entry.items.length === 0) pending++;
+  }
+  // unique-* dependency: count them as pending until at least one unique category has loaded.
+  const anyUniqueLoaded = categoryEntries(gameData).some(
+    ([c, e]) => c.startsWith('unique-') && e && Array.isArray(e.items) && e.items.length > 0
+  );
+  const anyMechNeedsUniques = [...checkedMechanics].some(
+    (k) => mechanicMap[k] && (mechanicMap[k].sources || []).some((s) => (s.uniques || []).length > 0)
+  );
+  if (anyMechNeedsUniques && !anyUniqueLoaded) pending++;
+  return pending;
+}
+
+/** The Mechanic Rewards panel: mechanic checkboxes (+ Select All/None + Mechanic Consumables
+ * toggle), then either the aggregated consumables list or the mechanics ranked by top-drop value. */
+function renderMechanicsView(query) {
+  resultsContainer.innerHTML = '';
+  if (query) pushRecentSearch(query);
+
+  const gameData = cachedData[currentGame] || {};
+  const rates = gameData.__meta && gameData.__meta.rates;
+  const keys = Object.keys(mechanicMap);
+
+  if (keys.length === 0) {
+    resultsContainer.innerHTML = `<div class="empty-state"><p>No mechanic data available for ${currentGame.toUpperCase()}.</p></div>`;
+    return;
+  }
+
+  // ── Controls: Select All / None, Mechanic Consumables toggle, heuristic note ──
+  const controls = document.createElement('div');
+  controls.className = 'mechanics-controls';
+
+  const selectAll = document.createElement('button');
+  selectAll.className = 'mechanics-btn';
+  selectAll.textContent = 'Select all';
+  selectAll.addEventListener('click', () => {
+    checkedMechanics = new Set(keys);
+    saveCheckedMechanics();
+    renderMechanicsView(query);
+  });
+
+  const selectNone = document.createElement('button');
+  selectNone.className = 'mechanics-btn';
+  selectNone.textContent = 'Select none';
+  selectNone.addEventListener('click', () => {
+    checkedMechanics = new Set();
+    saveCheckedMechanics();
+    renderMechanicsView(query);
+  });
+
+  const consumablesToggle = document.createElement('label');
+  consumablesToggle.className = 'mechanics-consumables-toggle';
+  const consumablesCb = document.createElement('input');
+  consumablesCb.type = 'checkbox';
+  consumablesCb.checked = mechanicConsumablesMode;
+  consumablesCb.addEventListener('change', () => {
+    mechanicConsumablesMode = consumablesCb.checked;
+    renderMechanicsView(query);
+  });
+  consumablesToggle.appendChild(consumablesCb);
+  consumablesToggle.append(' Mechanic Consumables');
+
+  controls.appendChild(selectAll);
+  controls.appendChild(selectNone);
+  controls.appendChild(consumablesToggle);
+  resultsContainer.appendChild(controls);
+
+  const note = document.createElement('div');
+  note.className = 'mechanics-note';
+  note.textContent = 'Ranked by top single-drop value (market price, not drop rate).';
+  resultsContainer.appendChild(note);
+
+  // ── Mechanic checkboxes (multi-select) ──
+  const checks = document.createElement('div');
+  checks.className = 'mechanics-checklist';
+  for (const key of keys) {
+    const mech = mechanicMap[key];
+    const label = document.createElement('label');
+    label.className = 'mechanics-check';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = checkedMechanics.has(key);
+    cb.addEventListener('change', () => {
+      if (cb.checked) checkedMechanics.add(key);
+      else checkedMechanics.delete(key);
+      saveCheckedMechanics();
+      renderMechanicsView(query);
+    });
+    label.appendChild(cb);
+    label.append(` ${mech.label || key}`);
+    checks.appendChild(label);
+  }
+  resultsContainer.appendChild(checks);
+
+  // ── Partial-cache banner ──
+  const pending = pendingMechanicCategories(gameData);
+  if (pending > 0) {
+    const banner = document.createElement('div');
+    banner.className = 'mechanics-banner';
+    banner.textContent = `${pending} categor${pending === 1 ? 'y' : 'ies'} still loading — ranking may change.`;
+    resultsContainer.appendChild(banner);
+  }
+
+  const activeKeys = keys.filter((k) => checkedMechanics.has(k));
+  if (activeKeys.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.innerHTML = `<p>No mechanics selected — check one above, or click “Select all”.</p>`;
+    resultsContainer.appendChild(empty);
+    updateStatus();
+    return;
+  }
+
+  // ── "Mechanic Consumables" aggregate: one flat, price-sorted list across checked mechanics ──
+  if (mechanicConsumablesMode) {
+    const merged = [];
+    for (const key of activeKeys) merged.push(...resolveConsumables(mechanicMap[key], gameData, query));
+    const sorted = sortByAmount(merged, globalSortMode === 'none' ? 'desc' : globalSortMode, (p) => normalizedAmount(p.item, rates));
+    const limitKey = '__mechanic_consumables';
+    const limit = categoryRenderLimit[limitKey] || RENDER_CAP;
+    const section = buildCollapsibleSection('__mechanic_consumables', 'Mechanic Consumables', sorted.length, sortButtonHtml(), (itemsDiv, header) => {
+      wireSortButton(header, () => renderMechanicsView(query));
+      sorted.slice(0, limit).forEach(({ item, category }) => itemsDiv.appendChild(buildItemRow(item, category, query, rates)));
+      appendShowMoreIfNeeded(itemsDiv, limitKey, sorted.length, limit, () => renderMechanicsView(query));
+    });
+    resultsContainer.appendChild(section);
+    dataStatus.textContent = `${sorted.length} consumables across ${activeKeys.length} mechanics`;
+    return;
+  }
+
+  // ── Ranked mechanic list (top single-drop value, descending) ──
+  const ranked = activeKeys
+    .map((key) => ({ key, mech: mechanicMap[key], ...mechanicTopDrop(mechanicMap[key], gameData, rates) }))
+    .sort((a, b) => (b.value ?? -1) - (a.value ?? -1));
+
+  for (const { key, mech, top, value } of ranked) {
+    const topLabel = top ? `${escapeHtml(top.item.name)} · ${escapeHtml(formatDisplayValue(top.item, rates))}` : 'no priced drop yet';
+    const section = buildCollapsibleSection(
+      `__mech_${key}`,
+      escapeHtml(mech.label || key),
+      // "drop groups" = consumable categories + boss/encounter sources, so a consumables-only
+      // mechanic (Essence) doesn't misleadingly badge as 0.
+      (mech.consumables ? mech.consumables.length : 0) + (mech.sources ? mech.sources.length : 0),
+      `<span class="mechanics-top">top: ${topLabel}</span>`,
+      (itemsDiv) => {
+        // Consumables sub-list
+        const consumables = resolveConsumables(mech, gameData, query);
+        if (consumables.length > 0) {
+          const subHeader = document.createElement('div');
+          subHeader.className = 'mechanics-subheader';
+          subHeader.textContent = 'Consumables';
+          itemsDiv.appendChild(subHeader);
+          sortByAmount(consumables, 'desc', (p) => normalizedAmount(p.item, rates)).forEach(({ item, category }) =>
+            itemsDiv.appendChild(buildItemRow(item, category, query, rates))
+          );
+        }
+        // Boss/encounter source sections
+        for (const source of mech.sources || []) {
+          const subHeader = document.createElement('div');
+          subHeader.className = 'mechanics-subheader';
+          subHeader.innerHTML = `<span class="mechanics-kind kind-${source.kind}">${escapeHtml(KIND_LABEL[source.kind] || source.kind)}</span> ${escapeHtml(source.name)}`;
+          itemsDiv.appendChild(subHeader);
+          const { found, missing } = resolveSourceUniques(source, gameData, query);
+          sortByAmount(found, 'desc', (p) => normalizedAmount(p.item, rates)).forEach(({ item, category }) =>
+            itemsDiv.appendChild(buildItemRow(item, category, query, rates))
+          );
+          for (const name of missing) {
+            const row = document.createElement('div');
+            row.className = 'item-row mechanics-missing';
+            row.innerHTML = `<div class="item-row-main"><span class="item-name">${escapeHtml(name)}</span><span class="item-value">—</span></div>`;
+            itemsDiv.appendChild(row);
+          }
+        }
+      }
+    );
+    resultsContainer.appendChild(section);
+  }
+
+  dataStatus.textContent = `${ranked.length} mechanics ranked by top drop value`;
+}
+
 function renderResults(query) {
+  // The Mechanic Rewards view is a distinct multi-select mode — every render path (search debounce,
+  // empty-query branch, sidebar select) funnels through renderResults, so intercepting here is the
+  // single chokepoint that keeps it showing while its scope is active.
+  if (categoryScope === MECHANICS_SCOPE) {
+    renderMechanicsView(query);
+    return;
+  }
   resultsContainer.innerHTML = '';
   // renderResults('') is also (ab)used to show a sidebar category's full listing (empty query
   // trivially matches every item) — that's not a "search" a user typed, so don't pollute recent

@@ -2,3 +2,6 @@ node_modules/
 .cache/
 dist/
 *.log
+examples/
+# Seed-script scratch output — the hand-verified data/mechanic-drops.json is the committed artifact
+data/mechanic-drops.candidate.json

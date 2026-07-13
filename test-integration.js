@@ -62,6 +62,44 @@ async function topExpensiveItemsForLeague(game, league) {
   return { rates, top10: ranked.slice(0, 10), totalItems: ranked.length };
 }
 
+// Fixture-only mirrors of the renderer's Mechanic Rewards resolution logic (renderer.js's
+// resolveConsumables / mechanicTopDrop). Reimplemented here rather than imported — the renderer is
+// browser-sandboxed (no require), the same reason Test 10 reimplements ranking via
+// toPrimaryEquivalent instead of importing convertAmount. Kept tiny so drift is obvious.
+function flattenConsumablesFixture(mech, gameData) {
+  const out = [];
+  for (const spec of mech.consumables || []) {
+    const entry = gameData[spec.category];
+    if (!entry || !Array.isArray(entry.items)) continue;
+    const hasIds = Array.isArray(spec.ids) && spec.ids.length > 0;
+    const anyRowHasId = entry.items.some((it) => it && it.id != null);
+    for (const item of entry.items) {
+      if (hasIds && anyRowHasId && !spec.ids.includes(item.id)) continue;
+      out.push({ item, category: spec.category });
+    }
+  }
+  return out;
+}
+
+function topDropFixture(mech, gameData, toPrimary) {
+  const pool = flattenConsumablesFixture(mech, gameData);
+  for (const src of mech.sources || []) {
+    for (const name of src.uniques || []) {
+      for (const [cat, entry] of Object.entries(gameData)) {
+        if (!cat.startsWith('unique-') || !entry || !Array.isArray(entry.items)) continue;
+        for (const item of entry.items) if (item.name === name) pool.push({ item, category: cat });
+      }
+    }
+  }
+  let best = null;
+  for (const { item } of pool) {
+    const v = toPrimary(item);
+    if (v === null) continue;
+    if (!best || v > best.value) best = { item, value: v };
+  }
+  return best;
+}
+
 // ── Test framework ─────────────────────────
 
 let passCount = 0;
@@ -247,6 +285,61 @@ async function runTests() {
       });
     }
   }
+
+  // ═══ Test 11: Mechanic Rewards data + ranking (structural, offline) ══════
+  // The Mechanic Rewards view ranks a curated mechanic->drops map against cached economy data.
+  // These checks are OFFLINE and structural per repo policy — they validate the committed
+  // data/mechanic-drops.json (which is hand-curated per league) and the ranking/flatten LOGIC over
+  // a fixture cache, without asserting any specific live item name (which can be absent early-league).
+  console.log('\n═══ Test 11: Mechanic Rewards data + ranking ═══');
+  const { getMechanicMap } = require('./lib/mechanic-drops');
+  const mechMap = getMechanicMap('poe2');
+  const poe2Cats = getCategories('poe2');
+  const KINDS = new Set(['pinnacle-boss', 'mechanic-boss', 'encounter']);
+
+  assert(Object.keys(mechMap).length > 0, `Mechanic map: ${Object.keys(mechMap).length} POE2 mechanics (>0)`);
+
+  let dataOk = true;
+  for (const [key, mech] of Object.entries(mechMap)) {
+    if (typeof mech.label !== 'string' || !Array.isArray(mech.consumables) || !Array.isArray(mech.sources)) dataOk = false;
+    for (const spec of mech.consumables || []) {
+      if (!poe2Cats.includes(spec.category)) { dataOk = false; console.error(`  bad consumable category: ${key} -> ${spec.category}`); }
+      // `ids` are only valid on exchange-family categories (stable slug ids), NEVER unique-* (unstable numeric ids)
+      if (spec.ids && spec.category.startsWith('unique-')) { dataOk = false; console.error(`  ids on unique-* category: ${key} -> ${spec.category}`); }
+    }
+    for (const src of mech.sources || []) {
+      if (typeof src.name !== 'string' || !KINDS.has(src.kind) || !Array.isArray(src.uniques)) { dataOk = false; console.error(`  bad source in ${key}: ${JSON.stringify(src)}`); }
+    }
+  }
+  assert(dataOk, 'Mechanic map: every mechanic well-formed; consumable slugs valid; no ids on unique-* categories');
+
+  // Fixture cache — exercises id-subset filtering, the no-id stale-cache fallback, and ranking.
+  const fixtureRates = { primary: 'Divine', rates: { chaos: 100, exalted: 10 } };
+  const fixture = {
+    __meta: { rates: fixtureRates },
+    omens: { items: [ { id: 'keep', name: 'Kept Omen', amount: 5, unit: 'Divine' }, { id: 'drop', name: 'Dropped Omen', amount: 2, unit: 'Divine' } ] },
+    'unique-weapons': { items: [ { id: 42, name: 'Fixture Blade', amount: 20, unit: 'Divine' } ] },
+    legacy: { items: [ { name: 'No-Id Row', amount: 1, unit: 'Divine' } ] }, // predates the `id` field
+  };
+  const toPrimary = (item) => toPrimaryEquivalent(item, fixtureRates);
+
+  // Flatten with an id-subset: only the matching id survives (both rows carry ids here).
+  const subset = { consumables: [{ category: 'omens', ids: ['keep'] }] };
+  const subsetRows = flattenConsumablesFixture(subset, fixture);
+  assert(subsetRows.length === 1 && subsetRows[0].item.id === 'keep', `Consumable id-subset keeps only listed ids (${subsetRows.length} row)`);
+
+  // Whole-category (no ids): every row.
+  const whole = { consumables: [{ category: 'omens' }] };
+  assert(flattenConsumablesFixture(whole, fixture).length === 2, 'Whole-category consumable includes every row');
+
+  // Stale-cache fallback: an id-subset over a category whose rows predate `id` degrades to whole-category.
+  const staleSubset = { consumables: [{ category: 'legacy', ids: ['whatever'] }] };
+  assert(flattenConsumablesFixture(staleSubset, fixture).length === 1, 'Id-subset degrades to whole-category when rows lack id');
+
+  // Ranking: top single-drop value picks the most valuable drop (the unique here, 20 Divine).
+  const rankMech = { consumables: [{ category: 'omens' }], sources: [{ name: 'Fixture Blade', kind: 'pinnacle-boss', uniques: ['Fixture Blade'] }] };
+  const top = topDropFixture(rankMech, fixture, toPrimary);
+  assert(top && top.value === 20, `Top single-drop value picks the most valuable drop (got ${top && top.value})`);
 
   // ═══ Summary ══════
   console.log('\n' + '='.repeat(50));

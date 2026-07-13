@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const ninjaApi = require('./lib/ninja-api');
 const { getCategories } = require('./lib/categories');
+const { getMechanicMap } = require('./lib/mechanic-drops');
 const { discoverCategories } = require('./lib/category-discovery');
 const { autoUpdater } = require('electron-updater');
 
@@ -360,6 +361,10 @@ ipcMain.handle('get-cached-data', (_event, gameKey, leagueSlug) => {
   if (!leagueSlug) return {};
   return readCache(gameKey, leagueSlug);
 });
+
+// Static, committed mechanic->drops map for the Mechanic Rewards view (see lib/mechanic-drops.js).
+// No network cost — the renderer ranks/joins it against already-cached economy data itself.
+ipcMain.handle('get-mechanic-map', (_event, gameKey) => getMechanicMap(gameKey));
 
 ipcMain.handle('get-leagues', async (_event, gameKey) => {
   try {

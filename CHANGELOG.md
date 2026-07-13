@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.0 — 2026-07-13
+
+- **Mechanic Rewards (POE2)**: a new "⚔ Mechanic Rewards" view at the top of the POE2 sidebar. Pick
+  any set of endgame mechanics (checkbox per mechanic, plus Select all / Select none) and see, for
+  each, its tradeable consumable drops and its mechanic-boss / pinnacle-boss / encounter-**locked**
+  uniques — tagged with the source NPC/encounter. Mechanics are ranked by **top single-drop value**
+  (the most expensive locked drop, normalized to the league's primary currency). World drops (e.g.
+  Mageblood) are intentionally excluded.
+- **"Mechanic Consumables" filter**: one flattened, price-sorted list of every checked mechanic's
+  consumable drops (omens, catalysts, distilled emotions, etc.) at once.
+- The ranking is an explicit **market-price** heuristic, not a drop-rate estimate (poe.ninja
+  publishes no drop rates) — the view labels it as such. Ranking joins a committed, hand-verified
+  mechanic→drops map against already-cached economy data, so it makes **no extra poe.ninja requests**.
+
 ## 1.0.15 — 2026-07-05
 
 - **"Search All" super category**: a new entry at the very top of the sidebar merges every item
