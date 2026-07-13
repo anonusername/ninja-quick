@@ -103,6 +103,13 @@ drop rates, so the UI labels it *"top single-drop value (market price, not drop 
   static map against already-cached economy data + `__meta.rates` via `convertAmount` — **no extra
   poe.ninja request**. Cached rows carry `id` (added to `normalizeRow`) for the consumable id-subset
   filter; older caches predating that field degrade gracefully to whole-category.
+- **View controls** (all persisted, view-local): a **grouping** toggle (`mechanicMergeMode`) —
+  by-mechanic sections vs. one merged, value-sorted list where each row is **tagged with its
+  mechanic** (`buildItemRow`'s optional `tag` param); a **content filter** (`mechanicConsumablesMode`,
+  "Consumables only") that drops the boss uniques; and a **value sort** (`mechanicSortMode`, default
+  `desc`) applied identically to the item rows in every mechanic and the merged list — the mechanic
+  *sections* stay ordered by top-drop value regardless. The merged list omits unpriced uniques (no
+  sort key); they remain in the by-mechanic view.
 - **Seeding**: `scripts/discover-mechanic-drops.js` queries poe2wiki.net's Cargo API
   (`action=cargoquery`, the `items.drop_text` field — the only structured "locked-drop" signal;
   poedb.tw has no JSON API) into `data/mechanic-drops.candidate.json`. That candidate is **noisy**

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.0 — 2026-07-13
+
+- **Mechanic Rewards — group/merge toggle**: a new "Merge into one list" toggle collapses every
+  checked mechanic's drops into one long, value-sorted list, with each row tagged by its mechanic so
+  you can still tell where a drop comes from. Off keeps the per-mechanic ranked sections.
+- **Mechanic Rewards — value sort**: a "Value ▼/▲" control that sorts the item rows the same way
+  across every mechanic (and the merged list); the mechanic sections themselves stay ordered by
+  top-drop value.
+- The old "Mechanic Consumables" toggle is now a cleaner **"Consumables only"** content filter that
+  composes with both of the above. All three view preferences persist across sessions.
+
 ## 1.1.0 — 2026-07-13
 
 - **Mechanic Rewards (POE2)**: a new "⚔ Mechanic Rewards" view at the top of the POE2 sidebar. Pick

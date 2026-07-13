@@ -273,7 +273,9 @@ function getSuperCategoryItems(superCat, query) {
 
 let mechanicMap = {};            // { [key]: { label, consumables, sources } } for POE2, from IPC
 let mechanicMapLoaded = false;
-let mechanicConsumablesMode = false; // "Mechanic Consumables" aggregate toggle
+let mechanicConsumablesMode = false; // content filter: consumables only vs. consumables + uniques
+let mechanicMergeMode = false;       // grouping: false = sections per mechanic, true = one merged list
+let mechanicSortMode = 'desc';       // view-local value sort ('none'|'desc'|'asc'), applied to all mechanics
 
 /** Checked mechanic keys (multi-select). Defaults to all mechanics; persisted like favorites. */
 let checkedMechanics = new Set();
@@ -292,6 +294,14 @@ function saveCheckedMechanics() {
   localStorage.setItem('ninja_checked_mechanics', JSON.stringify([...checkedMechanics]));
 }
 
+/** Load the persisted Mechanic Rewards view preferences (grouping, content filter, value sort). */
+function loadMechanicViewPrefs() {
+  mechanicMergeMode = localStorage.getItem('ninja_mechanic_merge') === 'true';
+  mechanicConsumablesMode = localStorage.getItem('ninja_mechanic_consumables') === 'true';
+  const sort = localStorage.getItem('ninja_mechanic_sort');
+  mechanicSortMode = ['none', 'desc', 'asc'].includes(sort) ? sort : 'desc';
+}
+
 /** Fetch the committed mechanic map once (POE2). Safe to call repeatedly; caches after first load. */
 async function ensureMechanicMap() {
   if (mechanicMapLoaded) return;
@@ -302,6 +312,7 @@ async function ensureMechanicMap() {
     mechanicMap = {};
   }
   mechanicMapLoaded = true;
+  loadMechanicViewPrefs();
   // First-run default: every mechanic checked. A saved (possibly empty) set is respected as-is.
   const saved = loadCheckedMechanics();
   checkedMechanics = saved !== null ? saved : new Set(Object.keys(mechanicMap));
@@ -764,7 +775,7 @@ function bellIconHtml(active) {
 
 /** Builds one item row — shared by search results and the favorites section so the two can't
  * drift apart. `query` is optional; when empty, the name is shown plain (no highlight). */
-function buildItemRow(item, category, query, rates) {
+function buildItemRow(item, category, query, rates, tag = '') {
   const row = document.createElement('div');
   row.className = 'item-row';
   row.dataset.itemName = item.name;
@@ -784,6 +795,7 @@ function buildItemRow(item, category, query, rates) {
       ${sparkline}
       ${displayValue ? `<span class="item-value">${escapeHtml(displayValue)}</span>` : ''}
       ${item.changePercent ? `<span class="item-change ${changeClass}">${escapeHtml(item.changePercent)}</span>` : ''}
+      ${tag ? `<span class="item-mechanic-tag">${escapeHtml(tag)}</span>` : ''}
       <button class="item-favorite ${isFavorite ? 'active' : ''}" title="Pin to favorites">${isFavorite ? '★' : '☆'}</button>
       <button class="item-alert ${hasAlert ? 'active' : ''}" title="Set a price alert">${bellIconHtml(hasAlert)}</button>
       <button class="item-copy" title="Copy item name">⧉</button>
@@ -1568,6 +1580,32 @@ function renderMechanicsView(query) {
     renderMechanicsView(query);
   });
 
+  // Value-sort button — one shared direction applied to the item rows in every mechanic (and the
+  // merged list); the mechanic sections themselves stay ordered by top-drop value. View-local
+  // (mechanicSortMode), not the app-wide globalSortMode, so it defaults to highest-first here.
+  const sortBtn = document.createElement('button');
+  sortBtn.className = 'mechanics-btn';
+  sortBtn.textContent = mechanicSortMode === 'desc' ? 'Value ▼' : mechanicSortMode === 'asc' ? 'Value ▲' : 'Sort by value';
+  sortBtn.title = 'Sort every mechanic by value (click to change direction)';
+  sortBtn.addEventListener('click', () => {
+    mechanicSortMode = nextSortMode(mechanicSortMode);
+    localStorage.setItem('ninja_mechanic_sort', mechanicSortMode);
+    renderMechanicsView(query);
+  });
+
+  const mergeToggle = document.createElement('label');
+  mergeToggle.className = 'mechanics-consumables-toggle';
+  const mergeCb = document.createElement('input');
+  mergeCb.type = 'checkbox';
+  mergeCb.checked = mechanicMergeMode;
+  mergeCb.addEventListener('change', () => {
+    mechanicMergeMode = mergeCb.checked;
+    localStorage.setItem('ninja_mechanic_merge', String(mechanicMergeMode));
+    renderMechanicsView(query);
+  });
+  mergeToggle.appendChild(mergeCb);
+  mergeToggle.append(' Merge into one list');
+
   const consumablesToggle = document.createElement('label');
   consumablesToggle.className = 'mechanics-consumables-toggle';
   const consumablesCb = document.createElement('input');
@@ -1575,19 +1613,24 @@ function renderMechanicsView(query) {
   consumablesCb.checked = mechanicConsumablesMode;
   consumablesCb.addEventListener('change', () => {
     mechanicConsumablesMode = consumablesCb.checked;
+    localStorage.setItem('ninja_mechanic_consumables', String(mechanicConsumablesMode));
     renderMechanicsView(query);
   });
   consumablesToggle.appendChild(consumablesCb);
-  consumablesToggle.append(' Mechanic Consumables');
+  consumablesToggle.append(' Consumables only');
 
   controls.appendChild(selectAll);
   controls.appendChild(selectNone);
+  controls.appendChild(sortBtn);
+  controls.appendChild(mergeToggle);
   controls.appendChild(consumablesToggle);
   resultsContainer.appendChild(controls);
 
   const note = document.createElement('div');
   note.className = 'mechanics-note';
-  note.textContent = 'Ranked by top single-drop value (market price, not drop rate).';
+  note.textContent = mechanicMergeMode
+    ? 'One list, sorted by value (market price, not a drop-rate estimate).'
+    : 'Mechanics ranked by top single-drop value (market price, not a drop-rate estimate).';
   resultsContainer.appendChild(note);
 
   // ── Mechanic checkboxes (multi-select) ──
@@ -1631,29 +1674,43 @@ function renderMechanicsView(query) {
     return;
   }
 
-  // ── "Mechanic Consumables" aggregate: one flat, price-sorted list across checked mechanics ──
-  if (mechanicConsumablesMode) {
+  const includeUniques = !mechanicConsumablesMode; // "Consumables only" drops the boss uniques
+  const byValue = (p) => normalizedAmount(p.item, rates);
+
+  // ── Merged mode: one value-sorted list across every checked mechanic, each row mechanic-tagged ──
+  if (mechanicMergeMode) {
     const merged = [];
-    for (const key of activeKeys) merged.push(...resolveConsumables(mechanicMap[key], gameData, query));
-    const sorted = sortByAmount(merged, globalSortMode === 'none' ? 'desc' : globalSortMode, (p) => normalizedAmount(p.item, rates));
-    const limitKey = '__mechanic_consumables';
+    for (const key of activeKeys) {
+      const mech = mechanicMap[key];
+      const mechLabel = mech.label || key;
+      for (const c of resolveConsumables(mech, gameData, query)) merged.push({ ...c, mechLabel });
+      // Unpriced/missing uniques are omitted here — they'd have no value to sort by; they stay
+      // visible in the by-mechanic view. Only priced `found` uniques join the merged list.
+      if (includeUniques) for (const source of mech.sources || []) {
+        for (const f of resolveSourceUniques(source, gameData, query).found) merged.push({ ...f, mechLabel });
+      }
+    }
+    const sorted = sortByAmount(merged, mechanicSortMode, byValue);
+    const limitKey = '__mechanic_merged';
     const limit = categoryRenderLimit[limitKey] || RENDER_CAP;
-    const section = buildCollapsibleSection('__mechanic_consumables', 'Mechanic Consumables', sorted.length, sortButtonHtml(), (itemsDiv, header) => {
-      wireSortButton(header, () => renderMechanicsView(query));
-      sorted.slice(0, limit).forEach(({ item, category }) => itemsDiv.appendChild(buildItemRow(item, category, query, rates)));
+    const title = includeUniques ? 'All Mechanic Drops' : 'All Mechanic Consumables';
+    const section = buildCollapsibleSection(limitKey, title, sorted.length, '', (itemsDiv) => {
+      sorted.slice(0, limit).forEach(({ item, category, mechLabel }) =>
+        itemsDiv.appendChild(buildItemRow(item, category, query, rates, mechLabel))
+      );
       appendShowMoreIfNeeded(itemsDiv, limitKey, sorted.length, limit, () => renderMechanicsView(query));
     });
     resultsContainer.appendChild(section);
-    dataStatus.textContent = `${sorted.length} consumables across ${activeKeys.length} mechanics`;
+    dataStatus.textContent = `${sorted.length} drops across ${activeKeys.length} mechanics`;
     return;
   }
 
-  // ── Ranked mechanic list (top single-drop value, descending) ──
+  // ── By-mechanic mode: sections still ordered by top-drop value; item rows sorted per the view sort ──
   const ranked = activeKeys
     .map((key) => ({ key, mech: mechanicMap[key], ...mechanicTopDrop(mechanicMap[key], gameData, rates) }))
     .sort((a, b) => (b.value ?? -1) - (a.value ?? -1));
 
-  for (const { key, mech, top, value } of ranked) {
+  for (const { key, mech, top } of ranked) {
     const topLabel = top ? `${escapeHtml(top.item.name)} · ${escapeHtml(formatDisplayValue(top.item, rates))}` : 'no priced drop yet';
     const section = buildCollapsibleSection(
       `__mech_${key}`,
@@ -1670,18 +1727,18 @@ function renderMechanicsView(query) {
           subHeader.className = 'mechanics-subheader';
           subHeader.textContent = 'Consumables';
           itemsDiv.appendChild(subHeader);
-          sortByAmount(consumables, 'desc', (p) => normalizedAmount(p.item, rates)).forEach(({ item, category }) =>
+          sortByAmount(consumables, mechanicSortMode, byValue).forEach(({ item, category }) =>
             itemsDiv.appendChild(buildItemRow(item, category, query, rates))
           );
         }
-        // Boss/encounter source sections
-        for (const source of mech.sources || []) {
+        // Boss/encounter source sections (hidden by the "Consumables only" content filter)
+        if (includeUniques) for (const source of mech.sources || []) {
           const subHeader = document.createElement('div');
           subHeader.className = 'mechanics-subheader';
           subHeader.innerHTML = `<span class="mechanics-kind kind-${source.kind}">${escapeHtml(KIND_LABEL[source.kind] || source.kind)}</span> ${escapeHtml(source.name)}`;
           itemsDiv.appendChild(subHeader);
           const { found, missing } = resolveSourceUniques(source, gameData, query);
-          sortByAmount(found, 'desc', (p) => normalizedAmount(p.item, rates)).forEach(({ item, category }) =>
+          sortByAmount(found, mechanicSortMode, byValue).forEach(({ item, category }) =>
             itemsDiv.appendChild(buildItemRow(item, category, query, rates))
           );
           for (const name of missing) {

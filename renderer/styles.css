@@ -1472,3 +1472,18 @@ mark {
 .mechanics-missing:hover {
   background: transparent;
 }
+
+/* Per-row mechanic tag, shown in the merged "one list" view so you can still tell which mechanic
+   a drop came from. Sits between the value/change and the favorite/alert/copy buttons. */
+.item-mechanic-tag {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px solid var(--coolgrey-700);
+  white-space: nowrap;
+}
