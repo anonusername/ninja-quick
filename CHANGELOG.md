@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2 — 2026-07-13
+
+- **Sidebar polish**: the "⚔ Mechanic Rewards" entry now renders as an inset, rounded box the same
+  width and style as the other sidebar entries (Search All, All Gems, …), instead of a full-bleed
+  edge-to-edge bar. It remains the topmost entry.
+
 ## 1.1.1 — 2026-07-13
 
 - **Mechanic Rewards — group/merge toggle**: a new "Merge into one list" toggle collapses every

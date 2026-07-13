@@ -1062,11 +1062,18 @@ function renderCategorySidebar() {
 /** Standalone "⚔ Mechanic Rewards" sidebar entry (POE2 only), styled like a super-category header
  * but routing to the multi-select Mechanics view instead of a merged category list. */
 function buildMechanicsSidebarEntry() {
+  // Wrapped in a `.sidebar-supercategory-group` (the inset + border + rounded box) so it renders the
+  // same width and style as the other super-category entries (Search All, All Gems, …), mirroring the
+  // header-only box buildSuperCategoryGroup(searchAll, [], …) produces. No refresh (⟳) button — unlike
+  // the fetchable super-categories, this view has no category data to refresh.
+  const group = document.createElement('div');
+  group.className = 'sidebar-supercategory-group';
   const header = document.createElement('div');
   header.className = `sidebar-supercategory-header ${categoryScope === MECHANICS_SCOPE ? 'active' : ''}`;
   header.innerHTML = `<span class="sidebar-item-label">⚔ Mechanic Rewards</span>`;
   header.addEventListener('click', selectMechanicsScope);
-  return header;
+  group.appendChild(header);
+  return group;
 }
 
 /** Enter the Mechanic Rewards view (or, if it's already active, toggle back to Search All — the
