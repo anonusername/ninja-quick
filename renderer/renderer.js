@@ -8,7 +8,7 @@
 let currentGame = 'poe2';       // 'poe1' | 'poe2' — POE2 is the default/priority game
 let detectedLeagues = { poe1: [], poe2: [] };   // [{ slug, displayName, hardcore, indexed }]
 let currentLeague = { poe1: '', poe2: '' };     // stores the league SLUG
-// { categorySlug: { items: [{id,name,value,changePercent,icon,amount,unit,trend}], fetchedAt },
+// { categorySlug: { items: [{id,name,value,changePercent,changeValue,icon,amount,unit,trend,volume,listings}], fetchedAt },
 //   __meta: { rates: {primary, rates}, updatedAt } } — scoped to whichever league is
 // currentLeague[game] at the time it was loaded; always reload after switching leagues.
 let cachedData = {};
@@ -63,6 +63,7 @@ const THEMES = [
   { key: 'theduke', label: 'The Duke' },
   { key: 'funstation256', label: 'Funstation 256' },
   { key: 'oldfruit', label: 'Old Fruit' },
+  { key: 'kalandra', label: 'Mirror of Kalandra' },
 ];
 const THEME_KEYS = new Set(THEMES.map((t) => t.key));
 
@@ -73,6 +74,19 @@ function setTheme(theme) {
   document.documentElement.dataset.theme = currentTheme;
   localStorage.setItem('ninja_theme', currentTheme);
   applyThemeColors(currentGame); // re-applies accent/glow/divider for the new theme's colors
+}
+
+/** Row-density preference: 'comfortable' (default) or 'compact' (tighter rows, base-type line hidden —
+ * kept in the hover tooltip — for ~30-40% more visible rows in the narrow window). */
+function applyDensity() {
+  const compact = localStorage.getItem('ninja_density') === 'compact';
+  document.body.classList.toggle('density-compact', compact);
+}
+
+/** Shimmer skeleton placeholder rows, shown while categories/data load instead of plain "Loading…"
+ * text. The shimmer animation is disabled under prefers-reduced-motion (see styles.css). */
+function skeletonRows(n, cls) {
+  return `<div class="skeleton-wrap">${Array.from({ length: n }, () => `<div class="skeleton-row ${cls || ''}"></div>`).join('')}</div>`;
 }
 
 const REFRESH_INTERVAL_OPTIONS = [
@@ -98,7 +112,10 @@ function categoryEntries(gameData) {
  * single category refresh) keeps the sidebar accurate without each needing its own call. */
 async function reloadCache(game) {
   cachedData[game] = await window.ninjaApi.getCachedData(game, currentLeague[game]);
-  if (currentGame === game) renderCategorySidebar();
+  if (currentGame === game) {
+    renderCategorySidebar();
+    renderRateTicker();
+  }
   return cachedData[game];
 }
 
@@ -119,11 +136,69 @@ function saveFavorites(game) {
   localStorage.setItem(`ninja_favorites_${game}`, JSON.stringify([...favorites[game]]));
 }
 
+// Gain/loss baselines run alongside the favorites Set (kept separate so membership logic is untouched):
+// { [favoriteKey]: { amount, unit, league, at } } — the item's price the moment you pinned it, used to
+// show ▲/▼ since. Favorites are per-game not per-league, so the baseline stores its league and is
+// re-baselined when the league changes (a cross-league % is meaningless). Legacy favorites with no
+// baseline are lazily baselined on first render (see favoriteDelta).
+let favBaselines = { poe1: {}, poe2: {} };
+
+function loadFavBaselines(game) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(`ninja_fav_baseline_${game}`) || '{}');
+    return raw && typeof raw === 'object' ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveFavBaselines(game) {
+  localStorage.setItem(`ninja_fav_baseline_${game}`, JSON.stringify(favBaselines[game]));
+}
+
 function toggleFavorite(game, category, name) {
   const key = favoriteKey(category, name);
-  if (favorites[game].has(key)) favorites[game].delete(key);
-  else favorites[game].add(key);
+  if (favorites[game].has(key)) {
+    favorites[game].delete(key);
+    delete favBaselines[game][key];
+  } else {
+    favorites[game].add(key);
+    // Snapshot the current price as the gain/loss baseline (filled by favoriteDelta if item is unknown here).
+    const item = findItemInCache(game, category, name);
+    if (item && item.amount !== null) {
+      favBaselines[game][key] = { amount: item.amount, unit: item.unit, league: currentLeague[game], at: Date.now() };
+    }
+  }
   saveFavorites(game);
+  saveFavBaselines(game);
+}
+
+/** Locate a live item's normalized data in the current cache (used to snapshot a favorite's baseline). */
+function findItemInCache(game, category, name) {
+  const entry = (cachedData[game] || {})[category];
+  return entry && Array.isArray(entry.items) ? entry.items.find((i) => i.name === name) : null;
+}
+
+/** ▲/▼ % since the item was favorited, as an HTML span — or '' if not favorited, no baseline, a league
+ * mismatch, or a unit mismatch. Lazily baselines legacy/league-changed favorites (no delta shown that
+ * render, like the alert checker's arm logic). Mirrors the alert checker's unit guard. */
+function favoriteDelta(category, item) {
+  const game = currentGame;
+  const key = favoriteKey(category, item.name);
+  if (!favorites[game].has(key) || item.amount === null) return '';
+  const base = favBaselines[game][key];
+  if (!base || base.league !== currentLeague[game] || base.unit !== item.unit) {
+    // Missing / stale-league / unit-changed → (re)baseline now, show nothing this render.
+    favBaselines[game][key] = { amount: item.amount, unit: item.unit, league: currentLeague[game], at: Date.now() };
+    saveFavBaselines(game);
+    return '';
+  }
+  if (base.amount === 0) return '';
+  const pct = ((item.amount - base.amount) / base.amount) * 100;
+  if (Math.abs(pct) < 0.05) return '';
+  const dir = pct > 0 ? 'positive' : 'negative';
+  const arrow = pct > 0 ? '▲' : '▼';
+  return `<span class="item-fav-delta ${dir}" title="Since you favorited it (${trimNumber(base.amount)} ${base.unit})">${arrow}${trimNumber(Math.abs(pct))}%</span>`;
 }
 
 /** Resolve the current game's favorited keys into live item data, skipping any favorite whose
@@ -790,7 +865,53 @@ function bellIconHtml(active) {
 
 /** Builds one item row — shared by search results and the favorites section so the two can't
  * drift apart. `query` is optional; when empty, the name is shown plain (no highlight). */
-function buildItemRow(item, category, query, rates, tag = '') {
+/** Official trade-site URL for an item in the current game+league. Named/stash items (they carry a
+ * baseType) become a name+type search; exchange-family currency (no reliable GGG id map) falls back to
+ * the league's bulk exchange page. '' if the league isn't resolved yet. */
+function tradeUrl(item) {
+  const leagueSlug = currentLeague[currentGame];
+  if (!leagueSlug) return '';
+  const league = (detectedLeagues[currentGame].find((l) => l.slug === leagueSlug) || {}).displayName || leagueSlug;
+  const isPoe2 = currentGame === 'poe2';
+  const base = isPoe2 ? 'https://www.pathofexile.com/trade2' : 'https://www.pathofexile.com/trade';
+  const realm = isPoe2 ? '/poe2' : '';
+  const baseType = item.description && item.description.baseType;
+  if (baseType) {
+    const q = { query: { name: item.name, type: baseType, status: { option: 'online' } } };
+    return `${base}/search${realm}/${encodeURIComponent(league)}?q=${encodeURIComponent(JSON.stringify(q))}`;
+  }
+  return `${base}/exchange${realm}/${encodeURIComponent(league)}`;
+}
+
+/** Liquidity signal for a row: {n, label} or null. Exchange rows carry `volume` (traded value), stash
+ * rows `listings` (count) — never both, so they're reported as distinct labeled metrics. */
+function liquidityOf(item) {
+  if (typeof item.volume === 'number') return { n: item.volume, label: `Volume: ${trimNumber(item.volume)}` };
+  if (typeof item.listings === 'number') return { n: item.listings, label: `Listings: ${item.listings}` };
+  return null;
+}
+
+/** A tinted liquidity dot tiered relative to `max` (the loaded category's peak). '' when there's no
+ * signal or no category-max context (mixed lists, where a relative tier would be meaningless). */
+function liquidityDotHtml(item, max) {
+  const liq = liquidityOf(item);
+  if (!liq || !max || max <= 0) return '';
+  const ratio = liq.n / max;
+  const tier = ratio >= 0.5 ? 'high' : ratio >= 0.15 ? 'mid' : 'low';
+  return `<span class="item-liquidity tier-${tier}" title="${escapeHtml(liq.label)}"></span>`;
+}
+
+/** The peak liquidity value across a list of items, for relative dot tiering (0 if none carry it). */
+function liquidityMaxOf(items) {
+  let max = 0;
+  for (const it of items) {
+    const liq = liquidityOf(it);
+    if (liq && liq.n > max) max = liq.n;
+  }
+  return max;
+}
+
+function buildItemRow(item, category, query, rates, tag = '', liquidityMax = null) {
   const row = document.createElement('div');
   row.className = 'item-row';
   row.dataset.itemName = item.name;
@@ -808,12 +929,15 @@ function buildItemRow(item, category, query, rates, tag = '') {
     <div class="item-row-main">
       <span class="item-name">${displayName}</span>
       ${sparkline}
+      ${liquidityDotHtml(item, liquidityMax)}
       ${displayValue ? `<span class="item-value">${escapeHtml(displayValue)}</span>` : ''}
       ${item.changePercent ? `<span class="item-change ${changeClass}">${escapeHtml(item.changePercent)}</span>` : ''}
+      ${isFavorite ? favoriteDelta(category, item) : ''}
       ${tag ? `<span class="item-mechanic-tag">${escapeHtml(tag)}</span>` : ''}
       <button class="item-favorite ${isFavorite ? 'active' : ''}" title="Pin to favorites">${isFavorite ? '★' : '☆'}</button>
       <button class="item-alert ${hasAlert ? 'active' : ''}" title="Set a price alert">${bellIconHtml(hasAlert)}</button>
       <button class="item-copy" title="Copy item name">⧉</button>
+      <button class="item-trade" title="Open on the official trade site">⇄</button>
     </div>
     ${item.description && item.description.baseType ? `<span class="item-basetype">${escapeHtml(item.description.baseType)}</span>` : ''}
   `;
@@ -827,6 +951,12 @@ function buildItemRow(item, category, query, rates, tag = '') {
   row.querySelector('.item-copy').addEventListener('click', (e) => {
     e.stopPropagation();
     copyItemName(item.name, e.currentTarget);
+  });
+
+  row.querySelector('.item-trade').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const url = tradeUrl(item);
+    if (url) window.ninjaApi.openExternal(url);
   });
 
   row.querySelector('.item-favorite').addEventListener('click', (e) => {
@@ -984,7 +1114,7 @@ const categorySidebar = document.getElementById('category-sidebar');
 async function loadLiveCategories(game) {
   const league = currentLeague[game];
   if (!league) return;
-  if (currentGame === game) categorySidebar.innerHTML = `<div class="sidebar-loading">Loading categories…</div>`;
+  if (currentGame === game) categorySidebar.innerHTML = skeletonRows(7, 'skeleton-sidebar');
   try {
     const result = await window.ninjaApi.getLiveCategories(game, league);
     liveCategories[game] = Array.isArray(result.categories) ? result.categories : [];
@@ -1042,7 +1172,7 @@ function renderCategorySidebar() {
   categorySidebar.innerHTML = '';
 
   if (cats.length === 0) {
-    categorySidebar.innerHTML = `<div class="sidebar-loading">Loading categories…</div>`;
+    categorySidebar.innerHTML = skeletonRows(7, 'skeleton-sidebar');
     return;
   }
 
@@ -1193,6 +1323,7 @@ async function selectSidebarCategory(slug) {
   // above) — redundant with the full applyGameSwitch() call later in this init, but cheap and
   // keeps this one validation rule (THEME_KEYS.has(...)) in one place instead of duplicated.
   setTheme(localStorage.getItem('ninja_theme'));
+  applyDensity();
 
   const savedUnit = localStorage.getItem('ninja_display_unit');
   if (savedUnit && ['Auto', 'Chaos', 'Divine', 'Exalted'].includes(savedUnit)) displayUnit = savedUnit;
@@ -1200,6 +1331,8 @@ async function selectSidebarCategory(slug) {
 
   favorites.poe1 = loadFavorites('poe1');
   favorites.poe2 = loadFavorites('poe2');
+  favBaselines.poe1 = loadFavBaselines('poe1');
+  favBaselines.poe2 = loadFavBaselines('poe2');
   alerts.poe1 = loadAlerts('poe1');
   alerts.poe2 = loadAlerts('poe2');
   // Mechanic Rewards: load shared view prefs + both games' maps (current game first so refs point right).
@@ -1320,6 +1453,7 @@ function switchGame(game) {
   localStorage.setItem('ninja_game', game);
   applyGameSwitch(game);
   pointMechanicRefs(); // Mechanic Rewards refs follow the active game (POE1/POE2 have different maps)
+  renderRateTicker();
   updateWindowTitle();
   updateStatus();
   renderForQuery(searchInput.value.trim().toLowerCase());
@@ -1864,8 +1998,9 @@ function renderResults(query) {
         (itemsDiv, header) => {
           wireRefreshButton(header, category);
           wireSortButton(header, () => renderResults(query));
+          const liqMax = liquidityMaxOf(matches); // relative liquidity-dot tiering within this category
           matches.slice(0, limit).forEach((item) => {
-            itemsDiv.appendChild(buildItemRow(item, category, query, rates));
+            itemsDiv.appendChild(buildItemRow(item, category, query, rates, '', liqMax));
           });
           appendShowMoreIfNeeded(itemsDiv, category, matches.length, limit, () => renderResults(query));
         }
@@ -2099,6 +2234,20 @@ function renderSettings() {
   hotkeyRow.appendChild(hotkeyCheckbox);
   box.appendChild(hotkeyRow);
 
+  // Compact row density
+  const densityRow = document.createElement('label');
+  densityRow.className = 'settings-row';
+  const densityCheckbox = document.createElement('input');
+  densityCheckbox.type = 'checkbox';
+  densityCheckbox.checked = localStorage.getItem('ninja_density') === 'compact';
+  densityCheckbox.addEventListener('change', () => {
+    localStorage.setItem('ninja_density', densityCheckbox.checked ? 'compact' : 'comfortable');
+    applyDensity();
+  });
+  densityRow.innerHTML = `<span>Compact rows (denser list, base type in tooltip)</span>`;
+  densityRow.appendChild(densityCheckbox);
+  box.appendChild(densityRow);
+
   // Notifications master toggle
   const notifRow = document.createElement('label');
   notifRow.className = 'settings-row';
@@ -2154,6 +2303,66 @@ function renderSettings() {
   resultsContainer.appendChild(box);
 }
 
+// ── Exchange-rate ticker ────────────────────
+
+/** Find a row in the current game's cached `currency` category (used for the Divine ticker row). */
+function findCurrencyRow(match) {
+  const cur = (cachedData[currentGame] || {}).currency;
+  return cur && Array.isArray(cur.items) ? cur.items.find(match) || null : null;
+}
+
+/** Render the persistent Divine⇄base rate strip — POE2 shows Divine⇄Exalted, POE1 Divine⇄Chaos,
+ * driven off the live `__meta.rates` table. Hidden entirely when rates are unavailable (the documented
+ * empty-rates fallback) rather than showing "= ?". Clicks through to the Divine row on poe.ninja. */
+function renderRateTicker() {
+  const el = document.getElementById('rate-ticker');
+  if (!el) return;
+  const gameData = cachedData[currentGame] || {};
+  const rates = gameData.__meta && gameData.__meta.rates;
+  const base = currentGame === 'poe2' ? 'Exalted' : 'Chaos';
+  const n = rates ? convertAmount(1, 'Divine', base, rates) : null;
+  if (n === null) { el.style.display = 'none'; el.innerHTML = ''; el.onclick = null; return; }
+  const divineRow = findCurrencyRow((i) => i.id === 'divine' || /^divine( orb)?$/i.test(i.name));
+  const spark = divineRow ? renderSparkline(divineRow.trend) : '';
+  const change = (divineRow && divineRow.changePercent) || '';
+  const changeClass = change.startsWith('+') ? 'positive' : change.startsWith('-') ? 'negative' : '';
+  el.style.display = '';
+  el.title = 'Divine exchange rate — click to open on poe.ninja';
+  el.innerHTML = `
+    <span class="rate-ticker-label">1 Divine =</span>
+    <span class="rate-ticker-value">${escapeHtml(trimNumber(n))} ${escapeHtml(base)}</span>
+    ${spark}
+    ${change ? `<span class="item-change ${changeClass}">${escapeHtml(change)}</span>` : ''}
+  `;
+  el.onclick = divineRow ? () => openInPoeNinjaCategory('currency', divineRow.name) : null;
+}
+
+// ── Movers & Shakers ────────────────────────
+
+const MOVERS_LIMIT = 12;
+const MOVERS_MIN_BASE = 1; // value floor in base currency — cheap items swing ±hundreds of % and would dominate
+
+/** Biggest 7-day gainers/losers across every cached category, floored to skip cheap-item noise.
+ * Uses the numeric `changeValue` (poe.ninja's 7-day sparkline totalChange) added in normalizeRow. */
+function getMovers(gameData, rates) {
+  const base = currentGame === 'poe2' ? 'Exalted' : 'Chaos';
+  const flat = [];
+  for (const [category, entry] of categoryEntries(gameData)) {
+    if (!entry || !Array.isArray(entry.items)) continue;
+    for (const item of entry.items) {
+      if (typeof item.changeValue !== 'number' || item.amount === null) continue;
+      const inBase = rates && rates.primary ? convertAmount(item.amount, item.unit, base, rates) : item.amount;
+      if (inBase === null || inBase < MOVERS_MIN_BASE) continue; // floor out cheap ±300% noise
+      flat.push({ item, category, change: item.changeValue });
+    }
+  }
+  flat.sort((a, b) => b.change - a.change);
+  return {
+    gainers: flat.filter((x) => x.change > 0).slice(0, MOVERS_LIMIT),
+    losers: flat.filter((x) => x.change < 0).slice(-MOVERS_LIMIT).reverse(),
+  };
+}
+
 // The category-by-category browsing list this used to render is now the permanent left sidebar
 // (see renderCategorySidebar) — the overview keeps only Favorites + Recent searches. Runs with
 // Search All as the active scope (never null — see SEARCH_ALL_SCOPE) so the sidebar highlight and
@@ -2166,7 +2375,7 @@ function showOverview() {
   const hasAnyData = categoryEntries(gameData).some(([, entry]) => entry && Array.isArray(entry.items) && entry.items.length > 0);
 
   if (!hasAnyData) {
-    resultsContainer.innerHTML = `<div class="empty-state"><p>No data loaded yet — fetching in background…</p></div>`;
+    resultsContainer.innerHTML = `<div class="results-loading"><p>Fetching economy data…</p>${skeletonRows(8, 'skeleton-result')}</div>`;
     return;
   }
 
@@ -2181,6 +2390,21 @@ function showOverview() {
         itemsDiv.appendChild(buildItemRow(item, category, '', rates));
       });
       appendShowMoreIfNeeded(itemsDiv, '__favorites', favoriteItems.length, limit, () => showOverview());
+    });
+    resultsContainer.appendChild(section);
+  }
+
+  // Movers & Shakers — biggest 7-day gainers/losers across the league (see getMovers's value floor).
+  const rates = gameData.__meta && gameData.__meta.rates;
+  const movers = getMovers(gameData, rates);
+  for (const [key, title, list] of [
+    ['__gainers', '▲ Top Gainers (7d)', movers.gainers],
+    ['__losers', '▼ Top Losers (7d)', movers.losers],
+  ]) {
+    if (list.length === 0) continue;
+    const section = buildCollapsibleSection(key, title, list.length, '', (itemsDiv) => {
+      const liqMax = liquidityMaxOf(list.map((m) => m.item));
+      list.forEach(({ item, category }) => itemsDiv.appendChild(buildItemRow(item, category, '', rates, '', liqMax)));
     });
     resultsContainer.appendChild(section);
   }

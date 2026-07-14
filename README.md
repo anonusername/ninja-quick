@@ -12,7 +12,12 @@ Cross-platform (Windows, macOS, Linux) desktop client for [poe.ninja](https://po
 - **Unified Search** — single text input searches across currency, uniques, fragments, essences, etc.; 300ms debounce; the search bar always shows which category/super-category you're currently in
 - **Keyboard Navigation** — ArrowUp/Down to move through results, Enter opens the item on poe.ninja in your system browser
 - **Background Data Fetching** — poe.ninja's own JSON API, cached locally; auto-refreshes every 12 hours for active leagues
-- **Favorites, Price Alerts, Fuzzy Search** — pin items, get a native OS notification when a price crosses a threshold, and typo-tolerant search fallback
+- **Favorites, Price Alerts, Fuzzy Search** — pin items, get a native OS notification when a price crosses a threshold, and typo-tolerant search fallback. Favorited items also show a ▲/▼ **gain/loss since you pinned them** (per-league baseline).
+- **Exchange-rate ticker** — a persistent header strip showing the league's Divine⇄base rate (POE2: Divine⇄Exalted, POE1: Divine⇄Chaos) with its trend — the number traders check constantly.
+- **Movers & Shakers** — the home overview lists the biggest 7-day gainers and losers across the league (value-floored so cheap-item noise doesn't dominate).
+- **Liquidity at a glance** — a tinted dot per item shows relative trade volume (currency) or listing count (uniques) within its category — "will it actually sell?" — with the exact number in the tooltip.
+- **Open on the official trade site** — a ⇄ button on each row opens pathofexile.com/trade pre-filtered for that item, so you can go straight from price to buying.
+- **Compact density + skeleton loaders** — a Settings toggle for denser rows (~30–40% more per screen), and shimmering skeleton placeholders while data loads.
 - **Auto-update** — packaged builds check GitHub Releases for updates at startup and every 4 hours after (Windows/Linux; see [Signing](#signing--macos-auto-update) for macOS)
 
 ## Download

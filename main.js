@@ -414,8 +414,10 @@ ipcMain.handle('fetch-category', async (_event, gameKey, leagueSlug, cat) => {
   }
 });
 
+// Whitelisted external hosts: poe.ninja (item pages) and pathofexile.com (the official trade site —
+// the "open on trade" row action). Anything else is silently ignored (never open arbitrary URLs).
 ipcMain.handle('open-external', (_event, url) => {
-  if (typeof url === 'string' && /^https:\/\/poe\.ninja\//.test(url)) {
+  if (typeof url === 'string' && /^https:\/\/(www\.)?(poe\.ninja|pathofexile\.com)\//.test(url)) {
     shell.openExternal(url);
   }
 });

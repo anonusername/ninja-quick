@@ -1487,3 +1487,117 @@ mark {
   border: 1px solid var(--coolgrey-700);
   white-space: nowrap;
 }
+
+/* ── Glowup: exchange-rate ticker ─────────── */
+.rate-ticker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  border-bottom: 1px solid var(--coolgrey-700);
+  cursor: pointer;
+  user-select: none;
+}
+.rate-ticker:hover { background: var(--bg-secondary); }
+.rate-ticker-label { color: var(--text-muted); }
+.rate-ticker-value { color: var(--gold); font-weight: 600; }
+
+/* ── Glowup: liquidity dot ───────────────── */
+.item-liquidity {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0.85;
+}
+.item-liquidity.tier-low { opacity: 0.3; }
+.item-liquidity.tier-mid { background: var(--text-secondary); }
+.item-liquidity.tier-high { background: var(--gold); box-shadow: 0 0 4px var(--gold-glow); }
+
+/* ── Glowup: favorites gain/loss delta ───── */
+.item-fav-delta {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+}
+.item-fav-delta.positive { color: var(--gold); }
+.item-fav-delta.negative { color: var(--danger); }
+
+/* ── Glowup: open-on-trade button ────────── */
+.item-trade {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+  border-radius: var(--radius);
+}
+.item-trade:hover { color: var(--accent); background: var(--bg-secondary); }
+
+/* ── Glowup: compact row density ─────────── */
+body.density-compact .item-row { padding-top: 3px; padding-bottom: 3px; }
+body.density-compact .item-row-main { gap: 5px; }
+body.density-compact .item-name,
+body.density-compact .item-value { font-size: 12px; }
+body.density-compact .item-basetype { display: none; } /* preserved in the hover tooltip */
+
+/* ── Glowup: skeleton loaders ────────────── */
+.skeleton-wrap { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; }
+.skeleton-row {
+  height: 16px;
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--coolgrey-700) 50%, var(--bg-secondary) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.3s ease-in-out infinite;
+}
+.skeleton-row.skeleton-sidebar { height: 22px; }
+.skeleton-row.skeleton-result { height: 28px; }
+.results-loading > p { padding: 12px 16px 0; color: var(--text-muted); font-size: 13px; font-style: italic; }
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-row { animation: none; opacity: 0.6; }
+}
+
+/* ── Glowup: "Mirror of Kalandra" theme (static prismatic / cold reflective metal, colors only) ── */
+:root[data-theme="kalandra"] {
+  --bg-primary: #0f141c;    /* deep slate-blue glass */
+  --bg-secondary: #18202b;
+  --bg-tertiary: #212c3a;
+  --coolgrey-600: #5a6d86;
+  --coolgrey-700: #33435a;
+  --coolgrey-800: #212c3a;
+  --coolgrey-900: #0f141c;
+
+  --text-primary: #eef3fb;  /* silvered near-white */
+  --text-secondary: #c3cede;
+  --text-muted: #7f8da3;
+
+  --poe1-accent: #b9a7e6;   /* pale prismatic violet */
+  --poe1-glow: rgba(185, 167, 230, 0.28);
+  --poe1-divider-glow: rgba(185, 167, 230, 0.5);
+  --poe2-accent: #7fdbe6;   /* icy cyan */
+  --poe2-glow: rgba(127, 219, 230, 0.26);
+  --poe2-divider-glow: rgba(127, 219, 230, 0.5);
+  --accent: var(--poe2-accent);
+  --glow: var(--poe2-glow);
+
+  --gold: #e8c479;          /* currency/value stays warm against the cold field */
+  --gold-glow: rgba(232, 196, 121, 0.18);
+  --danger: #e06c75;
+  --danger-glow: rgba(224, 108, 117, 0.16);
+  --favorite: #b9a7e6;
+  --alert: #7fdbe6;
+  --alert-glow: rgba(127, 219, 230, 0.3);
+
+  --supercategory-border: #5f7fa8;
+  --supercategory-glow: rgba(127, 219, 230, 0.22);
+}
