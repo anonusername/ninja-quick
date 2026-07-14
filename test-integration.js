@@ -293,25 +293,36 @@ async function runTests() {
   // a fixture cache, without asserting any specific live item name (which can be absent early-league).
   console.log('\n═══ Test 11: Mechanic Rewards data + ranking ═══');
   const { getMechanicMap } = require('./lib/mechanic-drops');
-  const mechMap = getMechanicMap('poe2');
-  const poe2Cats = getCategories('poe2');
   const KINDS = new Set(['pinnacle-boss', 'mechanic-boss', 'encounter']);
+  // `ids` subsets only work on EXCHANGE-family categories (rows keyed by a stable slug id). Stash-family
+  // categories (unique-*, invitations, temples, …) have unstable per-league NUMERIC ids, so an `ids`
+  // filter there silently matches nothing. Expand this allowlist only after confirming a category is
+  // exchange-family (see docs/api-endpoints.md). Currently only `fragments` uses ids (POE1).
+  const IDS_ALLOWED = new Set(['fragments']);
 
-  assert(Object.keys(mechMap).length > 0, `Mechanic map: ${Object.keys(mechMap).length} POE2 mechanics (>0)`);
-
-  let dataOk = true;
-  for (const [key, mech] of Object.entries(mechMap)) {
-    if (typeof mech.label !== 'string' || !Array.isArray(mech.consumables) || !Array.isArray(mech.sources)) dataOk = false;
-    for (const spec of mech.consumables || []) {
-      if (!poe2Cats.includes(spec.category)) { dataOk = false; console.error(`  bad consumable category: ${key} -> ${spec.category}`); }
-      // `ids` are only valid on exchange-family categories (stable slug ids), NEVER unique-* (unstable numeric ids)
-      if (spec.ids && spec.category.startsWith('unique-')) { dataOk = false; console.error(`  ids on unique-* category: ${key} -> ${spec.category}`); }
+  // Validate BOTH games' committed maps: shape, consumable slugs valid for that game, no `ids` on
+  // unique-* (unstable numeric ids), and no wiki "(variant)" suffixes in unique names (those never
+  // match poe.ninja's plain row names — they'd be permanent "—" rows).
+  for (const game of ['poe1', 'poe2']) {
+    const map = getMechanicMap(game);
+    const cats = getCategories(game);
+    assert(Object.keys(map).length > 0, `${game}: mechanic map has ${Object.keys(map).length} mechanics (>0)`);
+    let ok = true;
+    for (const [key, mech] of Object.entries(map)) {
+      if (typeof mech.label !== 'string' || !Array.isArray(mech.consumables) || !Array.isArray(mech.sources)) ok = false;
+      for (const spec of mech.consumables || []) {
+        if (!cats.includes(spec.category)) { ok = false; console.error(`  [${game}] bad consumable category: ${key} -> ${spec.category}`); }
+        if (spec.ids && !IDS_ALLOWED.has(spec.category)) { ok = false; console.error(`  [${game}] ids on a non-exchange-family category (would silently no-op): ${key} -> ${spec.category}`); }
+      }
+      for (const src of mech.sources || []) {
+        if (typeof src.name !== 'string' || !KINDS.has(src.kind) || !Array.isArray(src.uniques)) { ok = false; console.error(`  [${game}] bad source in ${key}`); }
+        for (const u of src.uniques || []) {
+          if (/\(/.test(u)) { ok = false; console.error(`  [${game}] unique name has a "(variant)" suffix (won't match poe.ninja): ${key} -> ${u}`); }
+        }
+      }
     }
-    for (const src of mech.sources || []) {
-      if (typeof src.name !== 'string' || !KINDS.has(src.kind) || !Array.isArray(src.uniques)) { dataOk = false; console.error(`  bad source in ${key}: ${JSON.stringify(src)}`); }
-    }
+    assert(ok, `${game}: every mechanic well-formed; consumable slugs valid; no ids on unique-*; no "(variant)" unique names`);
   }
-  assert(dataOk, 'Mechanic map: every mechanic well-formed; consumable slugs valid; no ids on unique-* categories');
 
   // Fixture cache — exercises id-subset filtering, the no-id stale-cache fallback, and ranking.
   const fixtureRates = { primary: 'Divine', rates: { chaos: 100, exalted: 10 } };

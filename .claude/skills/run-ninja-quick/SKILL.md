@@ -85,7 +85,7 @@ npx electron . --dev   # opens a real window with DevTools; Ctrl-C to quit
   `node_modules` resolves) with `args:['.', '--user-data-dir=C:/tmp/ninja-dev-profile']` instead.
   To get real prices in that throwaway profile, copy `%APPDATA%/ninja-quick/.cache` into
   `C:/tmp/ninja-dev-profile/.cache` first; delete the profile afterward (it holds a copy of the
-  user's cache). Note the sidebar (and the POE2-only "⚔ Mechanic Rewards" entry) only renders once
+  user's cache). Note the sidebar (and the per-game "⚔ Mechanic Rewards" entry) only renders once
   the live category scrape populates it — poll for your selector for ~30-60s on a fresh profile.
 
 - **`--dev` docks DevTools inside the same window and shrinks the real content viewport.**

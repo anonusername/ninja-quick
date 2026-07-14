@@ -1,9 +1,13 @@
 {
-  "_note": "POE2 endgame-mechanic reward map for the Mechanic Rewards view. HAND-VERIFIED from the poe2wiki.net Cargo `drop_text` seed (scripts/discover-mechanic-drops.js -> data/mechanic-drops.candidate.json) plus community boss<->mechanic confirmation. `uniques` lists come straight from the wiki's per-item drop_text (only mechanic/boss/encounter-LOCKED drops; world drops like Mageblood are intentionally absent). `consumables[].category` slugs must exist in lib/categories.js's POE2 list. `ids` (subset of a shared category) may only be used on exchange-family categories whose ids are stable slugs; the unique-* (stash) categories have unstable per-league numeric ids, so their drops are expressed as source `uniques` matched by name instead. Re-run the seed script + re-verify at each new POE2 league.",
+  "_note": "POE1 + POE2 endgame-mechanic reward map for the Mechanic Rewards view. HAND-VERIFIED from each game's wiki drop_text seed (scripts/discover-mechanic-drops.js -> mechanic-drops.candidate.json). `uniques` are mechanic/boss/encounter-LOCKED drops (world drops excluded), de-duped and stripped of wiki \"(variant)\" suffixes to match poe.ninja row names. `consumables[].category` slugs must exist in lib/categories.js for that game; `ids` (stable exchange-family slugs) subset a shared category, never on unique-* (unstable numeric ids). Re-run the seed + re-verify each league.",
   "poe2": {
     "breach": {
       "label": "Breach",
-      "consumables": [{ "category": "breach-catalyst" }],
+      "consumables": [
+        {
+          "category": "breach-catalyst"
+        }
+      ],
       "sources": [
         {
           "name": "Xesht, We That Are One",
@@ -22,18 +26,32 @@
     },
     "ritual": {
       "label": "Ritual",
-      "consumables": [{ "category": "omens" }],
+      "consumables": [
+        {
+          "category": "omens"
+        }
+      ],
       "sources": [
         {
           "name": "The King in the Mists",
           "kind": "pinnacle-boss",
-          "uniques": ["Beetlebite", "From Nothing", "Ingenuity", "Pragmatism", "The Burden of Shadows"]
+          "uniques": [
+            "Beetlebite",
+            "From Nothing",
+            "Ingenuity",
+            "Pragmatism",
+            "The Burden of Shadows"
+          ]
         }
       ]
     },
     "delirium": {
       "label": "Delirium",
-      "consumables": [{ "category": "liquid-emotions" }],
+      "consumables": [
+        {
+          "category": "liquid-emotions"
+        }
+      ],
       "sources": [
         {
           "name": "Simulacrum",
@@ -52,28 +70,60 @@
     },
     "expedition": {
       "label": "Expedition",
-      "consumables": [{ "category": "expedition" }],
+      "consumables": [
+        {
+          "category": "expedition"
+        }
+      ],
       "sources": [
         {
           "name": "Olroth, Origin of the Fall",
           "kind": "pinnacle-boss",
-          "uniques": ["Heroic Tragedy", "Keeper of the Arc", "Olroth's Resolve", "Olrovasara", "Svalinn"]
+          "uniques": [
+            "Heroic Tragedy",
+            "Keeper of the Arc",
+            "Olroth's Resolve",
+            "Olrovasara",
+            "Svalinn"
+          ]
         },
         {
           "name": "Vessel of Kulemak",
           "kind": "mechanic-boss",
-          "uniques": ["Darkness Enthroned", "Grip of Kulemak", "The Master's Reach", "The Unborn Lich", "Undying Hate"]
+          "uniques": [
+            "Darkness Enthroned",
+            "Grip of Kulemak",
+            "The Master's Reach",
+            "The Unborn Lich",
+            "Undying Hate"
+          ]
         }
       ]
     },
     "abyss": {
       "label": "Abyss",
-      "consumables": [{ "category": "abyssal-bones" }],
-      "sources": [{ "name": "Abyss", "kind": "mechanic-boss", "uniques": ["Heart of the Well"] }]
+      "consumables": [
+        {
+          "category": "abyssal-bones"
+        }
+      ],
+      "sources": [
+        {
+          "name": "Abyss",
+          "kind": "mechanic-boss",
+          "uniques": [
+            "Heart of the Well"
+          ]
+        }
+      ]
     },
     "essence": {
       "label": "Essence",
-      "consumables": [{ "category": "essences" }],
+      "consumables": [
+        {
+          "category": "essences"
+        }
+      ],
       "sources": []
     },
     "sekhemas": {
@@ -108,7 +158,13 @@
         {
           "name": "The Trialmaster",
           "kind": "pinnacle-boss",
-          "uniques": ["Glimpse of Chaos", "Hateforge", "Mahuxotl's Machination", "The Adorned", "Zerphi's Genesis"]
+          "uniques": [
+            "Glimpse of Chaos",
+            "Hateforge",
+            "Mahuxotl's Machination",
+            "The Adorned",
+            "Zerphi's Genesis"
+          ]
         }
       ]
     },
@@ -119,7 +175,724 @@
         {
           "name": "The Arbiter of Ash",
           "kind": "pinnacle-boss",
-          "uniques": ["Ab Aeterno", "Morior Invictus", "Prism of Belief", "Sacred Flame", "Sine Aequo", "Solus Ipse"]
+          "uniques": [
+            "Ab Aeterno",
+            "Morior Invictus",
+            "Prism of Belief",
+            "Sacred Flame",
+            "Sine Aequo",
+            "Solus Ipse"
+          ]
+        }
+      ]
+    }
+  },
+  "poe1": {
+    "atziri": {
+      "label": "Atziri",
+      "consumables": [
+        {
+          "category": "fragments",
+          "ids": [
+            "dusk",
+            "mid",
+            "dawn",
+            "noon",
+            "grie",
+            "ign",
+            "hope",
+            "rage"
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "name": "Atziri, Queen of the Vaal",
+          "kind": "pinnacle-boss",
+          "uniques": [
+            "Atziri's Acuity",
+            "Atziri's Disfavour",
+            "Atziri's Promise",
+            "Atziri's Reflection",
+            "Atziri's Rule",
+            "Atziri's Splendour",
+            "Atziri's Step",
+            "Beauty",
+            "Doryani's Catalyst",
+            "Doryani's Invitation",
+            "Pledge of Hands",
+            "The Vertex",
+            "Triumvirate Authority"
+          ]
+        }
+      ]
+    },
+    "shaper-elder": {
+      "label": "Shaper & Elder",
+      "consumables": [
+        {
+          "category": "fragments",
+          "ids": [
+            "phoenix",
+            "minot",
+            "hydra",
+            "chimer",
+            "fragment-of-knowledge",
+            "fragment-of-shape",
+            "fragment-of-emptiness",
+            "fragment-of-terror",
+            "fragment-of-constriction",
+            "fragment-of-purification",
+            "fragment-of-enslavement",
+            "fragment-of-eradication"
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "name": "The Shaper",
+          "kind": "pinnacle-boss",
+          "uniques": [
+            "Disintegrator",
+            "Echoes of Creation",
+            "Entropic Devastation",
+            "Indigon",
+            "Mark of the Elder",
+            "Mark of the Shaper",
+            "Starforge",
+            "Sublime Vision",
+            "The Tides of Time",
+            "Voidfletcher",
+            "Watcher's Eye"
+          ]
+        },
+        {
+          "name": "The Elder / Uber Elder",
+          "kind": "pinnacle-boss",
+          "uniques": [
+            "Call of the Void",
+            "Impresence",
+            "Soul Ascension",
+            "The Devourer of Minds",
+            "The Eternity Shroud",
+            "Voidforge"
+          ]
+        }
+      ]
+    },
+    "sirus": {
+      "label": "The Awakener (Sirus)",
+      "consumables": [
+        {
+          "category": "fragments",
+          "ids": [
+            "barans-crest",
+            "al-hezmins-crest",
+            "droxs-crest",
+            "veritanias-crest",
+            "awakening-fragment"
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "name": "Sirus, Awakener of Worlds",
+          "kind": "pinnacle-boss",
+          "uniques": [
+            "Oriath's End",
+            "The Saviour",
+            "The Tempest Rising",
+            "Thread of Hope"
+          ]
+        }
+      ]
+    },
+    "exarch-eater": {
+      "label": "Searing Exarch & Eater of Worlds",
+      "consumables": [
+        {
+          "category": "invitations"
+        }
+      ],
+      "sources": [
+        {
+          "name": "The Searing Exarch",
+          "kind": "pinnacle-boss",
+          "uniques": [
+            "Annihilation's Approach",
+            "Crystallised Omniscience",
+            "Forbidden Flame",
+            "The Annihilating Light",
+            "The Celestial Brace"
+          ]
+        },
+        {
+          "name": "The Eater of Worlds",
+          "kind": "pinnacle-boss",
+          "uniques": [
+            "Ashes of the Stars",
+            "Forbidden Flesh",
+            "Inextricable Fate",
+            "Nimis",
+            "Ravenous Passion"
+          ]
+        }
+      ]
+    },
+    "maven": {
+      "label": "The Maven",
+      "consumables": [
+        {
+          "category": "fragments",
+          "ids": [
+            "crescent-splinter",
+            "the-mavens-writ"
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "name": "The Maven",
+          "kind": "pinnacle-boss",
+          "uniques": [
+            "Arn's Anguish",
+            "Choir of the Storm",
+            "Cortex",
+            "Esh's Mirror",
+            "Esh's Visage",
+            "Grace of the Goddess",
+            "Graven's Secret",
+            "Hand of Thought and Motion",
+            "Hand of Wisdom and Action",
+            "Impossible Escape",
+            "Legacy of Fury",
+            "Olesya's Delight",
+            "Presence of Chayula",
+            "Progenesis",
+            "Severed in Sleep",
+            "Skin of the Lords",
+            "Skin of the Loyal",
+            "The Anticipation",
+            "The Blue Dream",
+            "The Blue Nightmare",
+            "The Formless Flame",
+            "The Formless Inferno",
+            "The Green Dream",
+            "The Green Nightmare",
+            "The Halcyon",
+            "The Infinite Pursuit",
+            "The Pandemonius",
+            "The Perfect Form",
+            "The Red Dream",
+            "The Red Nightmare",
+            "The Red Trail",
+            "The Snowblind Grace",
+            "The Surrender",
+            "Tulborn",
+            "Tulfall",
+            "United in Dream",
+            "Uul-Netol's Embrace",
+            "Uul-Netol's Kiss",
+            "Viridi's Veil",
+            "Voice of the Storm",
+            "Watcher's Eye",
+            "Xoph's Blood",
+            "Xoph's Heart",
+            "Xoph's Inception",
+            "Xoph's Nurture"
+          ]
+        }
+      ]
+    },
+    "delve": {
+      "label": "Delve",
+      "consumables": [
+        {
+          "category": "fossils"
+        },
+        {
+          "category": "resonators"
+        }
+      ],
+      "sources": [
+        {
+          "name": "Aul, the Crystal King",
+          "kind": "mechanic-boss",
+          "uniques": [
+            "Crown of the Tyrant"
+          ]
+        },
+        {
+          "name": "Azurite Mine",
+          "kind": "encounter",
+          "uniques": [
+            "Brinerot Whalers",
+            "Broken Faith",
+            "Cerberus Limb",
+            "Curiosity",
+            "Mutewind Pennant",
+            "Mutewind Seal",
+            "Mutewind Whispersteps",
+            "Primordial Eminence",
+            "Primordial Harmony",
+            "Primordial Might",
+            "Steppan Eard",
+            "The Pariah"
+          ]
+        }
+      ]
+    },
+    "incursion": {
+      "label": "Incursion",
+      "consumables": [
+        {
+          "category": "temples"
+        }
+      ],
+      "sources": [
+        {
+          "name": "The Vaal Omnitect",
+          "kind": "mechanic-boss",
+          "uniques": [
+            "Ambition",
+            "Atziri's Promise",
+            "Atziri's Step",
+            "Dance of the Offered",
+            "Doryani's Catalyst",
+            "Doryani's Invitation",
+            "Pledge of Hands",
+            "Sacrificial Heart",
+            "Soul Catcher",
+            "String of Servitude",
+            "Tempered Flesh",
+            "Tempered Mind",
+            "Tempered Spirit",
+            "Triumvirate Authority"
+          ]
+        }
+      ]
+    },
+    "sanctum": {
+      "label": "Sanctum",
+      "consumables": [],
+      "sources": [
+        {
+          "name": "Lycia, Herald of the Scourge",
+          "kind": "mechanic-boss",
+          "uniques": [
+            "Eternal Damnation",
+            "Mask of the Spirit Drinker",
+            "Original Sin",
+            "Sandstorm Visage",
+            "The Balance of Terror",
+            "The Blood of Innocence",
+            "The Broken Censer",
+            "The Chains of Castigation",
+            "The First Crest",
+            "The Gilded Chalice",
+            "The Hour of Divinity",
+            "The Night Lamp",
+            "The Original Scripture",
+            "The Power and the Promise",
+            "The Second Sacrament",
+            "The Winds of Fate"
+          ]
+        }
+      ]
+    },
+    "abyss": {
+      "label": "Abyss",
+      "consumables": [],
+      "sources": [
+        {
+          "name": "Abyssal Liches",
+          "kind": "mechanic-boss",
+          "uniques": [
+            "Amanamu's Gaze",
+            "Kurgal's Gaze",
+            "Tecrod's Gaze",
+            "Tombfist",
+            "Ulaman's Gaze"
+          ]
+        }
+      ]
+    },
+    "blight": {
+      "label": "Blight",
+      "consumables": [
+        {
+          "category": "oils"
+        }
+      ],
+      "sources": [
+        {
+          "name": "Blight",
+          "kind": "encounter",
+          "uniques": [
+            "Breathstealer",
+            "Cowl of the Ceraunophile",
+            "Cowl of the Cryophile",
+            "Cowl of the Thermophile",
+            "Sporeguard",
+            "Stranglegasp",
+            "The Stampede"
+          ]
+        }
+      ]
+    },
+    "delirium": {
+      "label": "Delirium",
+      "consumables": [
+        {
+          "category": "delirium-orbs"
+        },
+        {
+          "category": "fragments",
+          "ids": [
+            "simulacrum"
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "name": "Simulacrum",
+          "kind": "encounter",
+          "uniques": [
+            "Calamitous Visions",
+            "Kitava's Teachings",
+            "Megalomaniac",
+            "Natural Affinity",
+            "One With Nothing",
+            "Split Personality",
+            "The Front Line",
+            "The Interrogation",
+            "The Siege",
+            "Voices"
+          ]
+        }
+      ]
+    },
+    "ultimatum": {
+      "label": "Ultimatum",
+      "consumables": [],
+      "sources": [
+        {
+          "name": "The Trialmaster",
+          "kind": "mechanic-boss",
+          "uniques": [
+            "Gamblesprint",
+            "Glimpse of Chaos",
+            "Hateforge",
+            "Ixchel's Temptation",
+            "Mahuxotl's Machination",
+            "Relic of the Pact",
+            "Temptation Step",
+            "Yaomac's Accord"
+          ]
+        }
+      ]
+    },
+    "ritual": {
+      "label": "Ritual",
+      "consumables": [
+        {
+          "category": "omens"
+        }
+      ],
+      "sources": [
+        {
+          "name": "Ritual",
+          "kind": "encounter",
+          "uniques": [
+            "Blackflame",
+            "Hand of the Fervent",
+            "Nametaker",
+            "Qotra's Regulator",
+            "Survivor's Guilt",
+            "The Flawed Refuge",
+            "The Trickster's Smile"
+          ]
+        }
+      ]
+    },
+    "heist": {
+      "label": "Heist",
+      "consumables": [],
+      "sources": [
+        {
+          "name": "Grand Heist (Curio Displays)",
+          "kind": "encounter",
+          "uniques": [
+            "Actum",
+            "Crest of Desire",
+            "Expedition's End",
+            "Fated End",
+            "Font of Thunder",
+            "Replica Abyssus",
+            "Replica Advancing Fortress",
+            "Replica Alberon's Warpath",
+            "Replica Allelopathy",
+            "Replica Allure",
+            "Replica Alpha's Howl",
+            "Replica Ambu's Charge",
+            "Replica Atziri's Acuity",
+            "Replica Atziri's Foible",
+            "Replica Badge of the Brotherhood",
+            "Replica Bated Breath",
+            "Replica Bitterdream",
+            "Replica Blood Thorn",
+            "Replica Bloodplay",
+            "Replica Bones of Ullr",
+            "Replica Cold Iron Point",
+            "Replica Cortex",
+            "Replica Covenant",
+            "Replica Doedre's Damning",
+            "Replica Dreamfeather",
+            "Replica Duskdawn",
+            "Replica Earendel's Embrace",
+            "Replica Emberwake",
+            "Replica Eternity Shroud",
+            "Replica Farrul's Fur",
+            "Replica Fencoil",
+            "Replica Fragility",
+            "Replica Frostbreath",
+            "Replica Gifts from Above",
+            "Replica Grip of the Council",
+            "Replica Harvest",
+            "Replica Headhunter",
+            "Replica Heartbreaker",
+            "Replica Heatshiver",
+            "Replica Hinekora's Sight",
+            "Replica Hyrri's Ire",
+            "Replica Hyrri's Truth",
+            "Replica Infractem",
+            "Replica Innsbury Edge",
+            "Replica Inya's Epiphany",
+            "Replica Iron Commander",
+            "Replica Kalisa's Grace",
+            "Replica Kaom's Heart",
+            "Replica Karui Ward",
+            "Replica Kongor's Undying Rage",
+            "Replica Last Resort",
+            "Replica Lavianga's Spirit",
+            "Replica Leer Cast",
+            "Replica Lioneye's Paws",
+            "Replica Loreweave",
+            "Replica Malachai's Artifice",
+            "Replica Maloney's Mechanism",
+            "Replica Midnight Bargain",
+            "Replica Mistwall",
+            "Replica Nebulis",
+            "Replica Oro's Sacrifice",
+            "Replica Pacifism",
+            "Replica Paradoxica",
+            "Replica Perfect Form",
+            "Replica Pillars of Arun",
+            "Replica Poorjoy's Asylum",
+            "Replica Powerlessness",
+            "Replica Primordial Might",
+            "Replica Prismweave",
+            "Replica Quill Rain",
+            "Replica Reckless Defence",
+            "Replica Red Trail",
+            "Replica Restless Ward",
+            "Replica Rumi's Concoction",
+            "Replica Shroud of the Lightless",
+            "Replica Siegebreaker",
+            "Replica Sorrow of the Divine",
+            "Replica Soul Strike",
+            "Replica Soul Taker",
+            "Replica Soul Tether",
+            "Replica Stampede",
+            "Replica Tasalio's Sign",
+            "Replica Tempestuous Steel",
+            "Replica Three-step Assault",
+            "Replica Trypanon",
+            "Replica Tukohama's Fortress",
+            "Replica Tulfall",
+            "Replica Twyzel",
+            "Replica Ungil's Gauche",
+            "Replica Veil of the Night",
+            "Replica Victario's Charity",
+            "Replica Voideye",
+            "Replica Voidwalker",
+            "Replica Volkuur's Guidance",
+            "Replica Windripper",
+            "Replica Wings of Entropy",
+            "Replica Winterheart",
+            "Replica Witchfire Brew",
+            "Shattershard",
+            "The Fulcrum",
+            "The Hidden Blade",
+            "The Iron Mass"
+          ]
+        }
+      ]
+    },
+    "expedition": {
+      "label": "Expedition",
+      "consumables": [
+        {
+          "category": "artifacts"
+        }
+      ],
+      "sources": [
+        {
+          "name": "Expedition (Logbooks)",
+          "kind": "encounter",
+          "uniques": [
+            "Heroic Tragedy"
+          ]
+        }
+      ]
+    },
+    "legion": {
+      "label": "Legion",
+      "consumables": [
+        {
+          "category": "fragments",
+          "ids": [
+            "timeless-maraketh-emblem",
+            "timeless-templar-emblem",
+            "timeless-eternal-emblem",
+            "timeless-karui-emblem",
+            "timeless-vaal-emblem",
+            "uber-timeless-eternal-emblem",
+            "uber-timeless-karui-emblem",
+            "uber-timeless-vaal-emblem"
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "name": "Domain of Timeless Conflict",
+          "kind": "encounter",
+          "uniques": [
+            "Brutal Restraint",
+            "Elegant Hubris",
+            "Glorious Vanity",
+            "Lethal Pride",
+            "Militant Faith",
+            "Stasis Prison"
+          ]
+        }
+      ]
+    },
+    "labyrinth": {
+      "label": "The Labyrinth",
+      "consumables": [],
+      "sources": [
+        {
+          "name": "Izaro / the Labyrinth",
+          "kind": "encounter",
+          "uniques": [
+            "Death's Door",
+            "Emperor's Mastery",
+            "Grand Spectrum",
+            "Steelworm",
+            "The Scales of Justice",
+            "Unyielding Flame",
+            "Winds of Change",
+            "Xirgil's Crank"
+          ]
+        }
+      ]
+    },
+    "synthesis": {
+      "label": "Synthesis",
+      "consumables": [
+        {
+          "category": "fragments",
+          "ids": [
+            "synthesising-fragment"
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "name": "The Cortex",
+          "kind": "mechanic-boss",
+          "uniques": [
+            "Bottled Faith",
+            "Garb of the Ephemeral"
+          ]
+        }
+      ]
+    },
+    "essence": {
+      "label": "Essence",
+      "consumables": [
+        {
+          "category": "essences"
+        }
+      ],
+      "sources": []
+    },
+    "bestiary": {
+      "label": "Bestiary",
+      "consumables": [
+        {
+          "category": "beasts"
+        }
+      ],
+      "sources": [
+        {
+          "name": "Saqawal, First of the Sky",
+          "kind": "mechanic-boss",
+          "uniques": [
+            "Saqawal's Flock",
+            "Saqawal's Nest",
+            "Saqawal's Talons",
+            "Saqawal's Winds"
+          ]
+        }
+      ]
+    },
+    "breach": {
+      "label": "Breach",
+      "consumables": [],
+      "sources": [
+        {
+          "name": "Breachlords",
+          "kind": "mechanic-boss",
+          "uniques": [
+            "Choir of the Storm",
+            "Esh's Mirror",
+            "Esh's Visage",
+            "Hand of Thought and Motion",
+            "Hand of Wisdom and Action",
+            "Presence of Chayula",
+            "Severed in Sleep",
+            "Skin of the Lords",
+            "Skin of the Loyal",
+            "The Anticipation",
+            "The Blue Dream",
+            "The Blue Nightmare",
+            "The Formless Flame",
+            "The Formless Inferno",
+            "The Green Dream",
+            "The Green Nightmare",
+            "The Halcyon",
+            "The Infinite Pursuit",
+            "The Pandemonius",
+            "The Perfect Form",
+            "The Red Dream",
+            "The Red Nightmare",
+            "The Red Trail",
+            "The Snowblind Grace",
+            "The Surrender",
+            "Tulborn",
+            "Tulfall",
+            "United in Dream",
+            "Uul-Netol's Embrace",
+            "Uul-Netol's Kiss",
+            "Uul-Netol's Vow",
+            "Voice of the Storm",
+            "Xoph's Blood",
+            "Xoph's Heart",
+            "Xoph's Inception",
+            "Xoph's Nurture"
+          ]
         }
       ]
     }

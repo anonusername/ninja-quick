@@ -25,11 +25,13 @@ Run from the repo root, each with `unset ELECTRON_RUN_AS_NODE &&` prefixed:
    Re-scrapes `data/item-descriptions.json` (tooltip text for currency-type categories). Needed when
    a patch adds currency-type items missing tooltip text.
 4. **Mechanic drops** — `npx electron scripts/discover-mechanic-drops.js`
-   Seeds `data/mechanic-drops.candidate.json` from poe2wiki.net's Cargo API. **Hand-verify** into the
-   committed `data/mechanic-drops.json`: the candidate is noisy (HTML hoverbox markup, over-extracted
-   "sources"); map each real boss/encounter to the right mechanic + consumable categories, classify
-   `kind` (pinnacle-boss / mechanic-boss / encounter), and drop world-drop/ambiguous entries. See
-   AGENTS.md "Mechanic Rewards (POE2)".
+   Seeds a per-game `data/mechanic-drops.candidate.json` from each game's wiki Cargo API (POE1 →
+   poewiki.net, POE2 → poe2wiki.net). **Hand-verify** into the committed `data/mechanic-drops.json`
+   (keyed by game): the candidate is noisy (HTML hoverbox markup, over-extracted "sources"); map each
+   real boss/encounter to the right mechanic + consumable categories, classify `kind` (pinnacle-boss /
+   mechanic-boss / encounter), drop world-drop/ambiguous entries, and for POE1 strip `(variant)`
+   suffixes + de-dup + use `ids` subsets for shared exchange categories. See AGENTS.md "Mechanic
+   Rewards" ("POE1 specifics").
 
 ## Verify
 

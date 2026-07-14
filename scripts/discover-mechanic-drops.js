@@ -1,22 +1,23 @@
 /**
  * Mechanic-drops seed scrape (one-off / per-league maintenance).
  *
- * The Mechanic Rewards view (renderer) needs to know, per POE2 endgame mechanic, which UNIQUE items
+ * The Mechanic Rewards view (renderer) needs to know, per game + endgame mechanic, which UNIQUE items
  * are *locked* to that mechanic's bosses/encounters (as opposed to world drops like Mageblood, which
  * are intentionally excluded). poe.ninja's price API carries no drop-source metadata at all, and
- * poedb.tw has no JSON API (its /api path 404s). The one structured source is poe2wiki.net's
- * MediaWiki Cargo API (`/w/api.php?action=cargoquery`), whose `items` table exposes a `drop_text`
- * field — e.g. "Drops from [[Xesht, We That Are One]]", "Drops in the [[Simulacrum]]" — that is
- * null for world drops. It's reachable with a browser User-Agent (WebFetch/plain fetch get
- * Cloudflare-403'd; Electron's `net`, on Chromium's stack, is not).
+ * poedb.tw has no JSON API (its /api path 404s). The one structured source is each game's wiki
+ * MediaWiki Cargo API (POE1 → poewiki.net, POE2 → poe2wiki.net; `/w/api.php?action=cargoquery`), whose
+ * `items` table exposes a `drop_text` field — e.g. "Drops from [[Xesht, We That Are One]]", "Drops in
+ * the [[Simulacrum]]" — that is null for world drops. It's reachable with a browser User-Agent
+ * (WebFetch/plain fetch get Cloudflare-403'd; Electron's `net`, on Chromium's stack, is not).
  *
  * `drop_text` coverage is incomplete and the raw field frequently contains HTML hoverbox markup and
  * area-only sources (Simulacrum is an encounter, not an NPC), so this script only *seeds* a
  * candidate file (data/mechanic-drops.candidate.json). The committed data/mechanic-drops.json is the
  * HAND-VERIFIED result: the consumable→category mapping and the pinnacle/mechanic-boss/encounter
  * classification are curated by a human against this candidate — the raw scrape is never shipped
- * as-is. GGG adds mechanics/uniques every league, so re-run this and re-verify at each new POE2
- * league (same maintenance cadence as lib/categories.js).
+ * as-is (POE1 also needs `(variant)`-suffix stripping + de-dup + `ids` subsets for shared exchange
+ * categories; see AGENTS.md "POE1 specifics"). GGG adds mechanics/uniques every league, so re-run this
+ * and re-verify at each new league (same maintenance cadence as lib/categories.js).
  *
  * Run: npx electron scripts/discover-mechanic-drops.js   (unset ELECTRON_RUN_AS_NODE first)
  */
@@ -29,7 +30,12 @@ const OUT_DIR = path.join(__dirname, '..', 'data');
 const OUT_FILE = path.join(OUT_DIR, 'mechanic-drops.candidate.json');
 const LOG_FILE = path.join(OUT_DIR, '.discover-mechanic-drops.log');
 
-const API = 'https://www.poe2wiki.net/w/api.php';
+// One wiki per game — both are MediaWiki + Cargo, same `items` table shape. POE1's poewiki.net is
+// far richer (hundreds of uniques carry drop_text vs ~100 on poe2wiki.net).
+const WIKIS = {
+  poe1: 'https://www.poewiki.net/w/api.php',
+  poe2: 'https://www.poe2wiki.net/w/api.php',
+};
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 const PAGE_SIZE = 500;
 const REQUEST_TIMEOUT_MS = 20_000;
@@ -70,8 +76,8 @@ function httpGetJson(url) {
   });
 }
 
-/** Cargo query for one page of Unique items that carry drop_text. */
-async function fetchUniquesPage(offset) {
+/** Cargo query for one page of Unique items that carry drop_text, from a given wiki API. */
+async function fetchUniquesPage(api, offset) {
   const params = new URLSearchParams({
     action: 'cargoquery',
     tables: 'items',
@@ -81,7 +87,7 @@ async function fetchUniquesPage(offset) {
     offset: String(offset),
     format: 'json',
   });
-  const json = await httpGetJson(`${API}?${params.toString()}`);
+  const json = await httpGetJson(`${api}?${params.toString()}`);
   if (json.error) throw new Error(`Cargo API error: ${json.error.info || JSON.stringify(json.error)}`);
   return Array.isArray(json.cargoquery) ? json.cargoquery.map((r) => r.title) : [];
 }
@@ -122,8 +128,9 @@ function cleanDropText(raw) {
 // Heuristic first-guess kind for the CANDIDATE only — a human re-buckets in the committed file.
 // "encounter" = area/instance-locked (no single NPC); pinnacle bosses are the endgame invitation
 // fights; everything else with a named source is a plain mechanic-boss guess.
-const AREA_HINTS = /\bSimulacrum|Sanctum|Trial of\b|Expedition|Delirium|Breachstone|Domain\b/i;
-const PINNACLE_HINTS = /Xesht|King in the Mists|Arbiter of Ash|Zarokh|Olroth|Trialmaster/i;
+const AREA_HINTS = /\bSimulacrum|Sanctum|Trial of\b|Expedition|Delirium|Breachstone|Domain|Laboratory|Temple of Atzoatl|Alluring Abyss|Forbidden|Cortex\b/i;
+const PINNACLE_HINTS =
+  /Xesht|King in the Mists|Arbiter of Ash|Zarokh|Olroth|Trialmaster|Sirus|Maven|Searing Exarch|Eater of Worlds|Uber Elder|Shaper|Elder\b|Atziri|Catarina|Venarius|Cortex|Chayula|Uul-Netol|Vaal Omnitect/i;
 function guessKind(text, sources) {
   const joined = `${text} ${sources.join(' ')}`;
   if (PINNACLE_HINTS.test(joined)) return 'pinnacle-boss';
@@ -131,18 +138,19 @@ function guessKind(text, sources) {
   return 'mechanic-boss';
 }
 
-async function main() {
-  log(`Querying ${API} for Unique items with drop_text…`);
+/** Scrape one game's wiki and group its drop_text-carrying uniques by cleaned source name. */
+async function scrapeGame(game) {
+  const api = WIKIS[game];
+  log(`[${game}] querying ${api} for Unique items with drop_text…`);
   const rows = [];
   for (let offset = 0; ; offset += PAGE_SIZE) {
-    const page = await fetchUniquesPage(offset);
-    log(`  offset ${offset}: ${page.length} rows`);
+    const page = await fetchUniquesPage(api, offset);
+    log(`  [${game}] offset ${offset}: ${page.length} rows`);
     rows.push(...page);
     if (page.length < PAGE_SIZE) break;
   }
-  log(`Total uniques with drop_text: ${rows.length}`);
+  log(`[${game}] total uniques with drop_text: ${rows.length}`);
 
-  // Group by cleaned source name so a human sees "these uniques all drop from Xesht" at a glance.
   const bySource = new Map();
   const unmapped = []; // drop_text present but no wikilink source resolved — needs manual look
   for (const row of rows) {
@@ -157,18 +165,30 @@ async function main() {
       bySource.get(src).uniques.push(row.name);
     }
   }
-
-  const candidate = {
-    _generated: new Date().toISOString(),
-    _note:
-      'CANDIDATE ONLY — hand-verify into data/mechanic-drops.json. `kind` is a heuristic guess; ' +
-      'group these sources under the right mechanic key and add the consumable→category mapping ' +
-      'by hand. World-drop uniques never appear here (they have no drop_text on the wiki).',
+  return {
+    total: rows.length,
     sources: [...bySource.values()].sort((a, b) => b.uniques.length - a.uniques.length),
     unmappedDropText: unmapped,
   };
+}
+
+async function main() {
+  const candidate = {
+    _generated: new Date().toISOString(),
+    _note:
+      'CANDIDATE ONLY — hand-verify into data/mechanic-drops.json (keyed by game). `kind` is a ' +
+      'heuristic guess; group these sources under the right mechanic key and add the ' +
+      'consumable→category mapping by hand. World-drop uniques never appear here (no drop_text).',
+  };
+  // POE1 first is fine here (this is offline maintenance, not the app's paced fetch); do both games.
+  for (const game of ['poe1', 'poe2']) {
+    candidate[game] = await scrapeGame(game);
+  }
   fs.writeFileSync(OUT_FILE, JSON.stringify(candidate, null, 2));
-  log(`Wrote ${OUT_FILE}: ${candidate.sources.length} sources, ${unmapped.length} unmapped.`);
+  log(
+    `Wrote ${OUT_FILE}: ` +
+      ['poe1', 'poe2'].map((g) => `${g}=${candidate[g].sources.length} sources`).join(', ')
+  );
 }
 
 app.whenReady().then(async () => {

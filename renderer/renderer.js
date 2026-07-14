@@ -223,8 +223,8 @@ const SEARCH_ALL_SCOPE = SUPER_SCOPE_PREFIX + 'search-all';
 
 // The Mechanic Rewards view — a distinct MULTI-select mode (checkbox per mechanic), unlike the
 // single-select category/super-category scopes above. When categoryScope holds this, renderResults
-// delegates to renderMechanicsView. POE2-only (the mechanic map ships for POE2 only). See the
-// "Mechanic Rewards" block further down.
+// delegates to renderMechanicsView. Available for whichever game ships a mechanic map (both POE1 and
+// POE2 do; the current game's map is loaded per game). See the "Mechanic Rewards" block further down.
 const MECHANICS_SCOPE = '__mechanics';
 
 function superCategoryForScope(scope) {
@@ -261,7 +261,7 @@ function getSuperCategoryItems(superCat, query) {
 
 // ── Mechanic Rewards ────────────────────────
 //
-// A POE2-only view answering "which endgame mechanic is worth farming, and what does it drop?".
+// A per-game view answering "which endgame mechanic is worth farming, and what does it drop?".
 // The mechanic->drops map is a committed static dataset (data/mechanic-drops.json, via the
 // get-mechanic-map IPC) listing, per mechanic: its tradeable consumable categories and its
 // mechanic-boss/pinnacle-boss/encounter-LOCKED uniques (world drops like Mageblood are excluded).
@@ -271,18 +271,23 @@ function getSuperCategoryItems(superCat, query) {
 // currency): an explicit MARKET-PRICE heuristic, not a drop-rate/expected-value — poe.ninja
 // publishes no drop rates. The UI labels it as such.
 
-let mechanicMap = {};            // { [key]: { label, consumables, sources } } for POE2, from IPC
-let mechanicMapLoaded = false;
+// Per-game mechanic maps + checked sets (POE1 and POE2 have different mechanics). `mechanicMap` and
+// `checkedMechanics` below are always the CURRENT game's — pointed by pointMechanicRefs() on load and
+// game switch — so renderMechanicsView/pendingMechanicCategories can keep using them directly.
+let mechanicMaps = { poe1: null, poe2: null };            // null = not loaded yet
+let checkedMechanicsByGame = { poe1: null, poe2: null };
+let mechanicMap = {};            // current game's { [key]: { label, consumables, sources } }
+let checkedMechanics = new Set(); // current game's checked mechanic keys
+// View prefs are shared across games (a display preference, not per-game data).
 let mechanicConsumablesMode = false; // content filter: consumables only vs. consumables + uniques
 let mechanicMergeMode = false;       // grouping: false = sections per mechanic, true = one merged list
 let mechanicSortMode = 'desc';       // view-local value sort ('none'|'desc'|'asc'), applied to all mechanics
 
-/** Checked mechanic keys (multi-select). Defaults to all mechanics; persisted like favorites. */
-let checkedMechanics = new Set();
-
-function loadCheckedMechanics() {
+function loadCheckedMechanics(game) {
   try {
-    const raw = localStorage.getItem('ninja_checked_mechanics');
+    let raw = localStorage.getItem(`ninja_checked_mechanics_${game}`);
+    // Migrate the pre-per-game key (was POE2-only) so existing POE2 users keep their selection.
+    if (raw === null && game === 'poe2') raw = localStorage.getItem('ninja_checked_mechanics');
     if (raw === null) return null; // never saved — caller applies the "all" default
     return new Set(JSON.parse(raw));
   } catch {
@@ -291,7 +296,8 @@ function loadCheckedMechanics() {
 }
 
 function saveCheckedMechanics() {
-  localStorage.setItem('ninja_checked_mechanics', JSON.stringify([...checkedMechanics]));
+  checkedMechanicsByGame[currentGame] = checkedMechanics; // keep the per-game cache in sync with reassignments
+  localStorage.setItem(`ninja_checked_mechanics_${currentGame}`, JSON.stringify([...checkedMechanics]));
 }
 
 /** Load the persisted Mechanic Rewards view preferences (grouping, content filter, value sort). */
@@ -302,20 +308,29 @@ function loadMechanicViewPrefs() {
   mechanicSortMode = ['none', 'desc', 'asc'].includes(sort) ? sort : 'desc';
 }
 
-/** Fetch the committed mechanic map once (POE2). Safe to call repeatedly; caches after first load. */
-async function ensureMechanicMap() {
-  if (mechanicMapLoaded) return;
-  try {
-    mechanicMap = (await window.ninjaApi.getMechanicMap('poe2')) || {};
-  } catch (err) {
-    console.error('getMechanicMap failed:', err);
-    mechanicMap = {};
+/** Point the current-game refs at the loaded per-game caches (sync; safe once ensureMechanicMap ran). */
+function pointMechanicRefs() {
+  mechanicMap = mechanicMaps[currentGame] || {};
+  checkedMechanics = checkedMechanicsByGame[currentGame] || new Set();
+}
+
+/** Fetch a game's committed mechanic map once (defaults to the current game); caches per game. Points
+ * the current-game refs when it's the active game. Safe to call repeatedly. */
+async function ensureMechanicMap(game = currentGame) {
+  if (!mechanicMaps[game]) {
+    let map = {};
+    try {
+      map = (await window.ninjaApi.getMechanicMap(game)) || {};
+    } catch (err) {
+      console.error(`getMechanicMap(${game}) failed:`, err);
+      map = {};
+    }
+    mechanicMaps[game] = map;
+    // First-run default: every mechanic checked. A saved (possibly empty) set is respected as-is.
+    const saved = loadCheckedMechanics(game);
+    checkedMechanicsByGame[game] = saved !== null ? saved : new Set(Object.keys(map));
   }
-  mechanicMapLoaded = true;
-  loadMechanicViewPrefs();
-  // First-run default: every mechanic checked. A saved (possibly empty) set is respected as-is.
-  const saved = loadCheckedMechanics();
-  checkedMechanics = saved !== null ? saved : new Set(Object.keys(mechanicMap));
+  if (game === currentGame) pointMechanicRefs();
 }
 
 /** Rows for a mechanic's consumables from the cache. `{category}` = whole category; `{category, ids}`
@@ -1050,17 +1065,19 @@ function renderCategorySidebar() {
     ungrouped.push(cat);
   }
 
-  // Mechanic Rewards — POE2-only standalone entry (like Search All, not a category-matching super
-  // category). Rendered first, above every category/super-category, so it leads the sidebar.
-  if (currentGame === 'poe2') categorySidebar.appendChild(buildMechanicsSidebarEntry());
+  // Mechanic Rewards — standalone entry (like Search All, not a category-matching super category),
+  // shown for whichever game has a mechanic map (POE1 and POE2 both do). Rendered first, above every
+  // category/super-category, so it leads the sidebar.
+  if (mechanicMap && Object.keys(mechanicMap).length > 0) categorySidebar.appendChild(buildMechanicsSidebarEntry());
   const searchAll = SUPER_CATEGORIES.find((sc) => sc.key === 'search-all');
   categorySidebar.appendChild(buildSuperCategoryGroup(searchAll, [], gameData));
   for (const { superCat, memberCats } of groups) categorySidebar.appendChild(buildSuperCategoryGroup(superCat, memberCats, gameData));
   for (const cat of ungrouped) categorySidebar.appendChild(buildSidebarItemRow(cat, gameData));
 }
 
-/** Standalone "⚔ Mechanic Rewards" sidebar entry (POE2 only), styled like a super-category header
- * but routing to the multi-select Mechanics view instead of a merged category list. */
+/** Standalone "⚔ Mechanic Rewards" sidebar entry (shown per game — see renderCategorySidebar's
+ * non-empty-map gate), styled like a super-category header but routing to the multi-select Mechanics
+ * view instead of a merged category list. */
 function buildMechanicsSidebarEntry() {
   // Wrapped in a `.sidebar-supercategory-group` (the inset + border + rounded box) so it renders the
   // same width and style as the other super-category entries (Search All, All Gems, …), mirroring the
@@ -1185,7 +1202,10 @@ async function selectSidebarCategory(slug) {
   favorites.poe2 = loadFavorites('poe2');
   alerts.poe1 = loadAlerts('poe1');
   alerts.poe2 = loadAlerts('poe2');
-  await ensureMechanicMap(); // POE2 mechanic->drops map + persisted checkbox state (Mechanic Rewards view)
+  // Mechanic Rewards: load shared view prefs + both games' maps (current game first so refs point right).
+  loadMechanicViewPrefs();
+  await ensureMechanicMap(currentGame);
+  ensureMechanicMap(currentGame === 'poe2' ? 'poe1' : 'poe2').catch((err) => console.error('preload mechanic map failed:', err));
   notificationsEnabled = localStorage.getItem('ninja_notifications_enabled') !== 'false';
 
   const savedActiveLeagues = loadActiveLeaguesRaw();
@@ -1299,11 +1319,17 @@ function switchGame(game) {
   settingsOpen = false;
   localStorage.setItem('ninja_game', game);
   applyGameSwitch(game);
+  pointMechanicRefs(); // Mechanic Rewards refs follow the active game (POE1/POE2 have different maps)
   updateWindowTitle();
   updateStatus();
   renderForQuery(searchInput.value.trim().toLowerCase());
   if (liveCategories[game].length === 0) loadLiveCategories(game).catch((err) => console.error('loadLiveCategories error:', err));
   else renderCategorySidebar();
+  // Guard a fast switch before the preload finished: ensure this game's map, then refresh the sidebar
+  // so the ⚔ Mechanic Rewards entry appears/updates for the new game.
+  ensureMechanicMap(game)
+    .then(() => { if (currentGame === game) renderCategorySidebar(); })
+    .catch((err) => console.error('ensureMechanicMap on switch failed:', err));
 }
 
 /** Sets --accent/--glow and the tab-divider's colors for the given game, reading them straight

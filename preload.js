@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld('ninjaApi', {
   // actually reflects what's currently on the site rather than a hardcoded array.
   getLiveCategories: (gameKey, leagueSlug) =>
     ipcRenderer.invoke('get-live-categories', gameKey, leagueSlug),
-  // Committed mechanic->drops map (POE2 endgame mechanics) for the Mechanic Rewards view. Static
+  // Committed mechanic->drops map (per game — POE1/POE2 endgame mechanics) for the Mechanic Rewards view. Static
   // data; the renderer ranks it against cached economy data — no network round trip.
   getMechanicMap: (gameKey) =>
     ipcRenderer.invoke('get-mechanic-map', gameKey),
