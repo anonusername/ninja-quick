@@ -847,10 +847,11 @@ body {
 }
 
 .item-name {
-  flex: 1;
-  /* Without min-width:0 a flex:1 item won't shrink below its content's intrinsic width —
-     long item names would push the sparkline/value/change/copy button off the edge of the
-     (fairly narrow, 480px default) window instead of truncating. */
+  /* Default: don't grow — the name takes its natural width so the data columns (sparkline, value,
+     change, buttons) cluster immediately to its left (left-aligned). `body.columns-right` restores the
+     old flex:1 behavior that pushes those to the far right. min-width:0 keeps long names truncating
+     with an ellipsis instead of shoving the data off the (narrow, 480px default) window. */
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -858,6 +859,7 @@ body {
   font-size: 13px;
   color: var(--text-primary);
 }
+body.columns-right .item-name { flex: 1 1 0; }
 
 .item-value {
   flex-shrink: 0;

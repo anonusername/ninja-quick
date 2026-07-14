@@ -83,6 +83,13 @@ function applyDensity() {
   document.body.classList.toggle('density-compact', compact);
 }
 
+/** Column alignment preference. Default (left): item name takes natural width, data columns cluster to
+ * its left. 'right': the name grows to push price/trend/buttons to the far right (the old layout). Only
+ * affects item rows — the category sidebar is untouched. */
+function applyColumns() {
+  document.body.classList.toggle('columns-right', localStorage.getItem('ninja_columns') === 'right');
+}
+
 /** Shimmer skeleton placeholder rows, shown while categories/data load instead of plain "Loading…"
  * text. The shimmer animation is disabled under prefers-reduced-motion (see styles.css). */
 function skeletonRows(n, cls) {
@@ -272,17 +279,28 @@ const SUPER_CATEGORIES = [
     games: ['poe2'],
     match: (slug) => ['uncut-gems', 'lineage-support-gems'].includes(slug),
   },
+  // Consumables — one-shot items you use up for an effect (crafting currency, mechanic consumables).
+  // Two game-scoped entries (like the two "All Gems") since POE1/POE2 group differently. This
+  // deliberately absorbs what used to be POE1's "Crafting Currency" super and pulls delirium-orbs out
+  // of "All Atlas" (see below), per the broad-scope choice.
   {
-    key: 'crafting-currency',
-    label: 'Crafting Currency',
+    key: 'consumables-poe2',
+    label: 'Consumables',
+    games: ['poe2'],
+    match: (slug) => ['essences', 'omens', 'liquid-emotions', 'breach-catalyst', 'abyssal-bones', 'expedition'].includes(slug),
+  },
+  {
+    key: 'consumables',
+    label: 'Consumables',
     games: ['poe1'],
-    match: (slug) => ['fossils', 'resonators', 'essences', 'beasts', 'vials'].includes(slug),
+    match: (slug) =>
+      ['fossils', 'resonators', 'essences', 'beasts', 'vials', 'oils', 'delirium-orbs', 'tattoos', 'omens', 'allflame-embers', 'incubators', 'artifacts'].includes(slug),
   },
   {
     key: 'all-atlas',
     label: 'All Atlas',
     games: ['poe1'],
-    match: (slug) => ['scarabs', 'delirium-orbs', 'invitations', 'astrolabes', 'memories', 'temples'].includes(slug),
+    match: (slug) => ['scarabs', 'invitations', 'astrolabes', 'memories', 'temples'].includes(slug), // delirium-orbs moved to Consumables
   },
 ];
 
@@ -1324,6 +1342,7 @@ async function selectSidebarCategory(slug) {
   // keeps this one validation rule (THEME_KEYS.has(...)) in one place instead of duplicated.
   setTheme(localStorage.getItem('ninja_theme'));
   applyDensity();
+  applyColumns();
 
   const savedUnit = localStorage.getItem('ninja_display_unit');
   if (savedUnit && ['Auto', 'Chaos', 'Divine', 'Exalted'].includes(savedUnit)) displayUnit = savedUnit;
@@ -2101,6 +2120,8 @@ const RESETTABLE_SETTINGS = [
     localStorage.removeItem('ninja_favorites_poe2');
   },
   () => localStorage.removeItem('ninja_recent_searches'),
+  () => { localStorage.removeItem('ninja_density'); applyDensity(); },
+  () => { localStorage.removeItem('ninja_columns'); applyColumns(); },
 ];
 
 /** `prime: false` skips the post-reset active-league refetch — used by resetAllSettings, which
@@ -2247,6 +2268,20 @@ function renderSettings() {
   densityRow.innerHTML = `<span>Compact rows (denser list, base type in tooltip)</span>`;
   densityRow.appendChild(densityCheckbox);
   box.appendChild(densityRow);
+
+  // Column alignment: default left, opt-in to push data columns to the right
+  const columnsRow = document.createElement('label');
+  columnsRow.className = 'settings-row';
+  const columnsCheckbox = document.createElement('input');
+  columnsCheckbox.type = 'checkbox';
+  columnsCheckbox.checked = localStorage.getItem('ninja_columns') === 'right';
+  columnsCheckbox.addEventListener('change', () => {
+    localStorage.setItem('ninja_columns', columnsCheckbox.checked ? 'right' : 'left');
+    applyColumns();
+  });
+  columnsRow.innerHTML = `<span>Move data columns to the right (price/trend/buttons)</span>`;
+  columnsRow.appendChild(columnsCheckbox);
+  box.appendChild(columnsRow);
 
   // Notifications master toggle
   const notifRow = document.createElement('label');

@@ -285,6 +285,13 @@ not a bug.
 - Alert bell: outline icon by default, fills solid once a price alert is actually set on that item
   (a real SVG shape difference, not just a color change, matching the ★/☆ favorite-star pattern)
 - Keyboard navigation: ArrowUp/Down moves focus through results (skips rows inside a collapsed section), Enter opens selected item
+- Item rows also carry a per-row **liquidity dot** (relative volume/listing count within the category),
+  a **▲/▼ since-favorited** delta, and an **open-on-trade (⇄)** button (pathofexile.com/trade); each row
+  is **left-aligned by default**, with a Settings toggle to push the data columns to the right, and a
+  Settings **compact-density** toggle (hides the base-type line, kept in the tooltip)
+- A persistent **exchange-rate ticker** (Divine⇄base per game) sits under the status bar; the home
+  overview shows **Movers & Shakers** (7-day top gainers/losers, value-floored); loading states use
+  **shimmer skeletons**; **Mirror of Kalandra** is one of the selectable themes
 
 ## Build & Run Commands
 

@@ -31,11 +31,11 @@ earlier history).
    git add -A
    git commit -m "<type>: <summary> (vX.Y.Z)
 
-   <body>
-
-   Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+   <body>"
    ```
    (`feat:` for features, `fix:` for fixes, `chore:` for renumbers/tooling.)
+   **Never add a `Co-Authored-By: Claude …` trailer or any Claude/Anthropic co-author** (see CLAUDE.md's
+   attribution policy).
 5. **Push branch**: `git push origin the_path` (the default/working branch).
 6. **Tag + push** — this is what triggers CI:
    ```
