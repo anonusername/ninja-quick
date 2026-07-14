@@ -81,8 +81,9 @@ Two very different data sources feed this, handled in `lib/ninja-api.js`'s `extr
 ### Mechanic Rewards (POE2)
 
 A POE2-only view (sidebar entry "⚔ Mechanic Rewards", a **multi-select** mode distinct from the
-single-select `categoryScope` — checkbox per mechanic + Select All/None + a "Mechanic Consumables"
-aggregate toggle) answering *"which endgame mechanic is worth farming, and what drops from it?"*. It
+single-select `categoryScope` — checkbox per mechanic + Select All/None, a grouping toggle, a value
+sort, and a "Consumables only" filter; see the "View controls" bullet below) answering *"which
+endgame mechanic is worth farming, and what drops from it?"*. It
 lists each mechanic's tradeable **consumable** categories plus its mechanic-boss / pinnacle-boss /
 encounter-**locked** uniques (world drops like Mageblood are intentionally excluded), and ranks
 mechanics by **top single-drop value** — the most expensive locked drop in the pool, normalized to
@@ -175,7 +176,10 @@ and diff the regenerated `docs/api-endpoints.md`.
 
 If this env var is set to `1`, Electron runs as plain Node and `require('electron')` returns a
 path string instead of the Electron API — `app`/`net`/`BrowserWindow` will all be `undefined`.
-Unset it before any `npx electron ...` invocation.
+Unset it before any `npx electron ...` invocation. A **PreToolUse hook** (`guard-electron`, see
+"Claude Code tooling" below) now blocks any Electron/`npm test`/`npm run` command that doesn't clear
+the var, so prefix `unset ELECTRON_RUN_AS_NODE && …` on those — even when the var isn't actually set,
+since the hook matches the command text, not the live environment.
 
 ## Tech Stack
 
@@ -214,7 +218,7 @@ already in `node_modules` instead of running `npm ci` first.
 | `lib/categories.js` | Committed, curated category map per game — the source of truth on a fresh install; regenerate via `npm run generate-categories` |
 | `preload.js` | Secure IPC bridge — exposes `ninjaApi.getCachedData()`, `getLiveCategories()`, `getLeagues()`, `startFetch()`, `fetchCategory()`, `openExternal()`, `setZoomFactor()`, `clearCache()`, `setHotkeyEnabled()`, `onFetchProgress()`, `onUpdateDownloaded()`, `restartToUpdate()` to renderer |
 | `renderer/index.html` | Game switcher (2 tabs, POE 2 active by default), active label, search input + refresh/settings buttons, category sidebar + results area side by side |
-| `renderer/renderer.js` | Pure browser-side logic — game switching, category sidebar (incl. per-row force-refresh icon for unpopulated categories), 300ms debounced search, favorites, price alerts, settings panel, fuzzy search fallback, keyboard navigation |
+| `renderer/renderer.js` | Pure browser-side logic — game switching, category sidebar (incl. per-row force-refresh icon for unpopulated categories + the "⚔ Mechanic Rewards" entry), the Mechanic Rewards multi-select view (grouping/merge toggle, value sort, consumables filter), 300ms debounced search, favorites, price alerts, settings panel, fuzzy search fallback, keyboard navigation |
 | `renderer/styles.css` | Ledger theme (default, PoE-material palette) plus several other selectable themes, colors only; active tab gets glow effect; focused rows get accent outline |
 | `data/item-descriptions.json` | Committed static item-description data for currency-type categories (see "Item-description tooltips" above) — regenerate with `scripts/discover-currency-descriptions.js` |
 | `lib/mechanic-drops.js` | Loader for the committed mechanic→drops map (Mechanic Rewards view); reads `data/mechanic-drops.json` at require-time, served to the renderer via main.js's `get-mechanic-map` IPC |
@@ -300,6 +304,43 @@ npm test
 - **You do all testing yourself.** Never ask the user to run tests or verify results.
 - Integration tests should be structural (row counts, uniqueness, value coverage) — never assume specific item names, leagues, or endpoint shapes will always be the same; poe.ninja's API is undocumented and can change.
 - If a test fails, diagnose and fix before proceeding. If the failure looks like poe.ninja changed its API shape, re-run `scripts/discover-api.js` first.
+
+## Claude Code tooling (agents, skills, hooks, MCP)
+
+This repo ships a committed Claude Code setup under `.claude/` (plus `.mcp.json`). Personal/local
+config lives in `.claude/settings.local.json`, which is **not** committed.
+
+**Subagents** (`.claude/agents/*.md`) — spawn the specialist rather than doing cross-cutting work inline:
+- `ninja-data` — the data layer (`lib/ninja-api.js`, the endpoint map, `main.js` IPC, the JSON cache).
+- `ninja-ui` — the renderer (`renderer/*`) and the `preload.js` bridge.
+- `ninja-verify` — read-only verification (runs the tests, drives the app, reports pass/fail).
+- `api-drift-checker` — read-only; probes the live poe.ninja API against `docs/api-endpoints.md` and
+  reports drift with the concrete fix (use when data comes back empty, or as a pre-release sanity check).
+
+**Skills** (`.claude/skills/*/SKILL.md`) — both workflow skills are **user-invocable only**
+(`disable-model-invocation: true`), since they have side effects:
+- `run-ninja-quick` — build/launch/drive the app for verification (Playwright driver; documents the
+  single-instance-lock + `--user-data-dir` workaround and the `ELECTRON_RUN_AS_NODE` gotcha).
+- `release` — the full version-bump → CHANGELOG → commit → tag → push → watch-CI → verify flow
+  (stays in the 1.1.x patch line by default; see README "Releasing").
+- `reseed-league` — start-of-league regeneration of the committed datasets (`generate-categories`,
+  `discover-api`, `discover-currency-descriptions`, `discover-mechanic-drops`) + verification.
+
+**Hooks** (`.claude/settings.json` → `.claude/hooks/*.js`, plain Node, fail-open):
+- `guard-electron` (PreToolUse/Bash) — denies Electron/`npm test`/`npm run dev`/`generate-categories`
+  commands that don't clear `ELECTRON_RUN_AS_NODE` (see the gotcha above). Ignores `electron-builder`
+  and path/filename references.
+- `warn-generated-files` (PreToolUse/Edit|Write) — an "ask" gate before hand-editing the
+  script-generated / seed-then-verified files (`docs/api-endpoints.md`, `lib/categories.js`,
+  `data/item-descriptions.json`, `data/mechanic-drops.json`); prefer re-running the owning script,
+  the one exception being hand-verifying the mechanic-drops seed.
+
+**MCP servers**:
+- `context7` (in the committed `.mcp.json`) — live library/API docs (Electron, electron-builder,
+  electron-updater, etc.); no secret, safe to share.
+- `github` — configured per-user at **local scope** (`claude mcp add … -s local -H "Authorization:
+  Bearer <PAT>"`) so the token never enters the repo; intentionally not in `.mcp.json`.
+- `chrome-devtools` — plugin-provided; allow-listed in `.claude/settings.local.json`.
 
 ## Potential Pitfalls
 
