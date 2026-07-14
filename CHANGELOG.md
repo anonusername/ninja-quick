@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.3 — 2026-07-14
+
+- **Mechanic Rewards now covers POE1** (~21 mechanics vs POE2's ~9) — Atziri, Shaper & Elder, Sirus,
+  Exarch & Eater, Maven, Delve, Incursion, Sanctum, Abyss, Blight, Delirium, Ultimatum, Ritual, Heist,
+  Expedition, Legion, Labyrinth, Synthesis, Essence, Bestiary, Breach — with the same ranking, grouping,
+  sort, and consumables filter as POE2.
+- **Exchange-rate ticker** — a persistent header strip showing Divine⇄base (POE2 Divine⇄Exalted, POE1
+  Divine⇄Chaos) with its trend.
+- **Movers & Shakers** — the home overview lists the biggest 7-day gainers/losers across the league.
+- **Per-row extras** — a liquidity dot (relative volume/listings), a ▲/▼ gain-loss since you favorited
+  an item, and an **open-on-trade (⇄)** button that opens pathofexile.com/trade pre-filtered.
+- **Layout & visual** — item rows are **left-aligned by default** with a Settings toggle to push the
+  data columns right; a **compact-density** toggle; **skeleton loaders** while data loads; and a new
+  **"Mirror of Kalandra"** theme.
+- **New "Consumables" super category** grouping the crafting/mechanic consumables per game (absorbs the
+  old POE1 "Crafting Currency" group).
+
 ## 1.1.2 — 2026-07-13
 
 - **Sidebar polish**: the "⚔ Mechanic Rewards" entry now renders as an inset, rounded box the same
