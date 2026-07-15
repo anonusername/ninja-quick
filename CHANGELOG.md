@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.4 — 2026-07-14
+
+- **Aligned item columns** — the item list now lays out as a real grid: each column (name, trend,
+  price, change, actions) lines up vertically across rows and autofits to content, instead of each row
+  positioning independently. The name column autofits to the longest name (truncating), and the action
+  buttons sit in an aligned column on the right. The left/right column toggle still applies.
+
 ## 1.1.3 — 2026-07-14
 
 - **Mechanic Rewards now covers POE1** (~21 mechanics vs POE2's ~9) — Atziri, Shaper & Elder, Sirus,
