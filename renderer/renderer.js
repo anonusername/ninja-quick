@@ -943,20 +943,21 @@ function buildItemRow(item, category, query, rates, tag = '', liquidityMax = nul
   const existingAlert = findAlert(currentGame, category, item.name);
   const hasAlert = !!existingAlert && existingAlert.enabled !== false;
 
+  // Fixed cell structure (each a grid cell, empty when the row lacks that datum) so the columns line
+  // up across rows via subgrid — see .category-items/.item-row in styles.css. `.item-actions` is
+  // pinned to the last track (far right); the base-type is a full-width second grid row.
   row.innerHTML = `
-    <div class="item-row-main">
-      <span class="item-name">${displayName}</span>
-      ${sparkline}
-      ${liquidityDotHtml(item, liquidityMax)}
-      ${displayValue ? `<span class="item-value">${escapeHtml(displayValue)}</span>` : ''}
-      ${item.changePercent ? `<span class="item-change ${changeClass}">${escapeHtml(item.changePercent)}</span>` : ''}
-      ${isFavorite ? favoriteDelta(category, item) : ''}
-      ${tag ? `<span class="item-mechanic-tag">${escapeHtml(tag)}</span>` : ''}
+    <span class="item-name">${displayName}</span>
+    <span class="item-trend">${sparkline}</span>
+    <span class="item-price">${liquidityDotHtml(item, liquidityMax)}${displayValue ? `<span class="item-value">${escapeHtml(displayValue)}</span>` : ''}</span>
+    <span class="item-change-cell">${item.changePercent ? `<span class="item-change ${changeClass}">${escapeHtml(item.changePercent)}</span>` : ''}${isFavorite ? favoriteDelta(category, item) : ''}</span>
+    <span class="item-tag-cell">${tag ? `<span class="item-mechanic-tag">${escapeHtml(tag)}</span>` : ''}</span>
+    <span class="item-actions">
       <button class="item-favorite ${isFavorite ? 'active' : ''}" title="Pin to favorites">${isFavorite ? '★' : '☆'}</button>
       <button class="item-alert ${hasAlert ? 'active' : ''}" title="Set a price alert">${bellIconHtml(hasAlert)}</button>
       <button class="item-copy" title="Copy item name">⧉</button>
       <button class="item-trade" title="Open on the official trade site">⇄</button>
-    </div>
+    </span>
     ${item.description && item.description.baseType ? `<span class="item-basetype">${escapeHtml(item.description.baseType)}</span>` : ''}
   `;
 
@@ -1929,8 +1930,8 @@ function renderMechanicsView(query) {
           );
           for (const name of missing) {
             const row = document.createElement('div');
-            row.className = 'item-row mechanics-missing';
-            row.innerHTML = `<div class="item-row-main"><span class="item-name">${escapeHtml(name)}</span><span class="item-value">—</span></div>`;
+            row.className = 'mechanics-missing'; // full-width spanning row (not a grid item-row)
+            row.innerHTML = `<span class="item-name">${escapeHtml(name)}</span><span class="item-value">—</span>`;
             itemsDiv.appendChild(row);
           }
         }

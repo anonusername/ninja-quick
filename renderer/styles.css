@@ -793,27 +793,59 @@ body {
   color: var(--text-muted);
 }
 
+/* Item list as an aligned, autofitting grid: each item "type" gets its own column that lines up
+   across rows (via the subgrid on .item-row below). 7 tracks: name (autofits to the longest name,
+   truncates under pressure) · trend · price · change · tag (all autofit) · a 1fr spacer · actions
+   (pinned far right). The columns-right toggle swaps to a name-fills template (data at the right edge).*/
 .category-items {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) auto auto auto auto 1fr auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 2px;
   padding: 4px 8px;
+}
+
+body.columns-right .category-items {
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto auto;
 }
 
 .category-items.collapsed {
   display: none;
 }
 
+/* Non-item children of the grid (section subheaders, "show more", the unpriced-mechanic-drop row)
+   span every column so they don't consume/misalign the item tracks. */
+.category-items > .show-more-row,
+.category-items > .mechanics-subheader,
+.category-items > .mechanics-missing {
+  grid-column: 1 / -1;
+}
+.mechanics-missing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+}
+
 /* Individual item row — a miniature tooltip card: a left hairline in the active game's accent
    (reusing PoE's own item-tooltip border convention as functional UI), overridden to violet
    for a pinned favorite — the one deliberate rarity-adjacent accent in this app, used only here. */
 .item-row {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 12px 6px 10px;
+  /* A subgrid spanning the parent's columns so its cells line up with every other row. Only vertical
+     padding — horizontal padding would offset the subgrid tracks from the parent's and break the
+     alignment; the horizontal insets come from the container padding + the name/actions cell padding. */
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 8px;
+  padding: 4px 0;
   border-left: 2px solid transparent;
   border-radius: 0 var(--radius) var(--radius) 0;
   transition: background var(--transition), border-color var(--transition);
   cursor: default;
-  overflow: hidden;
 }
 
 .item-row:hover {
@@ -831,14 +863,10 @@ body {
   outline-offset: -1px;
 }
 
-.item-row-main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  overflow: hidden;
-}
-
 .item-basetype {
+  grid-column: 1 / -1; /* full-width second grid row, under the name */
+  grid-row: 2;
+  min-width: 0;
   font-size: 11px;
   color: var(--text-muted);
   overflow: hidden;
@@ -846,20 +874,32 @@ body {
   white-space: nowrap;
 }
 
+/* ── Item-row cells (each maps to one grid track via the subgrid) ── */
 .item-name {
-  /* Default: don't grow — the name takes its natural width so the data columns (sparkline, value,
-     change, buttons) cluster immediately to its left (left-aligned). `body.columns-right` restores the
-     old flex:1 behavior that pushes those to the far right. min-width:0 keeps long names truncating
-     with an ellipsis instead of shoving the data off the (narrow, 480px default) window. */
-  flex: 0 1 auto;
-  min-width: 0;
+  min-width: 0; /* allows the name column to shrink + ellipsis under space pressure */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding-left: 2px;
   font-size: 13px;
   color: var(--text-primary);
 }
-body.columns-right .item-name { flex: 1 1 0; }
+.item-trend,
+.item-price,
+.item-change-cell,
+.item-tag-cell,
+.item-actions {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.item-price { gap: 6px; }
+.item-change-cell { gap: 4px; }
+.item-actions {
+  grid-column: -2 / -1; /* pin the buttons to the last track (far right, past the 1fr spacer) */
+  gap: 2px;
+  padding-right: 4px;
+}
 
 .item-value {
   flex-shrink: 0;
@@ -1543,8 +1583,8 @@ mark {
 .item-trade:hover { color: var(--accent); background: var(--bg-secondary); }
 
 /* ── Glowup: compact row density ─────────── */
-body.density-compact .item-row { padding-top: 3px; padding-bottom: 3px; }
-body.density-compact .item-row-main { gap: 5px; }
+body.density-compact .item-row { padding-top: 2px; padding-bottom: 2px; }
+body.density-compact .category-items { column-gap: 5px; row-gap: 1px; }
 body.density-compact .item-name,
 body.density-compact .item-value { font-size: 12px; }
 body.density-compact .item-basetype { display: none; } /* preserved in the hover tooltip */
