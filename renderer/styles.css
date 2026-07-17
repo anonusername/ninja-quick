@@ -794,20 +794,25 @@ body {
 }
 
 /* Item list as an aligned, autofitting grid: each item "type" gets its own column that lines up
-   across rows (via the subgrid on .item-row below). 7 tracks: name (autofits to the longest name,
-   truncates under pressure) · trend · price · change · tag (all autofit) · a 1fr spacer · actions
-   (pinned far right). The columns-right toggle swaps to a name-fills template (data at the right edge).*/
+   across rows (via the subgrid on .item-row below). 7 tracks: name (`max-content` — always as wide as
+   the LONGEST name in the list, so no name is ever cut off) · trend · price · change · tag (all
+   autofit) · a 1fr spacer · actions (pinned far right). If the longest name + the data columns exceed
+   the window, the list scrolls horizontally (overflow-x below) rather than truncating anything — the
+   name column fits every item regardless of window size. The columns-right toggle swaps to a
+   name-fills template (data at the right edge) whose name track still can't shrink below the longest
+   name (`minmax(max-content, 1fr)`). */
 .category-items {
   display: grid;
-  grid-template-columns: minmax(0, max-content) auto auto auto auto 1fr auto;
+  grid-template-columns: max-content auto auto auto auto 1fr auto;
   align-items: center;
   column-gap: 8px;
   row-gap: 2px;
   padding: 4px 8px;
+  overflow-x: auto; /* long names widen the name column past the window — scroll, never clip */
 }
 
 body.columns-right .category-items {
-  grid-template-columns: minmax(0, 1fr) auto auto auto auto auto;
+  grid-template-columns: minmax(max-content, 1fr) auto auto auto auto auto;
 }
 
 .category-items.collapsed {
@@ -876,9 +881,8 @@ body.columns-right .category-items {
 
 /* ── Item-row cells (each maps to one grid track via the subgrid) ── */
 .item-name {
-  min-width: 0; /* allows the name column to shrink + ellipsis under space pressure */
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* One line, never clipped: the name always renders in full, and its width feeds the `max-content`
+     name track so the whole column is sized to the longest name in the list (overflow scrolls). */
   white-space: nowrap;
   padding-left: 2px;
   font-size: 13px;
