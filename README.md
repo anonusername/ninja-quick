@@ -17,6 +17,7 @@ Cross-platform (Windows, macOS, Linux) desktop client for [poe.ninja](https://po
 - **Movers & Shakers** — the home overview lists the biggest 7-day gainers and losers across the league (value-floored so cheap-item noise doesn't dominate).
 - **Liquidity at a glance** — a tinted dot per item shows relative trade volume (currency) or listing count (uniques) within its category — "will it actually sell?" — with the exact number in the tooltip.
 - **Open on the official trade site** — a ⇄ button on each row opens pathofexile.com/trade pre-filtered for that item, so you can go straight from price to buying.
+- **Aligned, autofitting columns** — the item list lays out as a real grid: name, trend, price, change, and actions each line up vertically across rows and autofit to content, with a Settings toggle to push the data columns to the left or right.
 - **Compact density + skeleton loaders** — a Settings toggle for denser rows (~30–40% more per screen), and shimmering skeleton placeholders while data loads.
 - **Auto-update** — packaged builds check GitHub Releases for updates at startup and every 4 hours after (Windows/Linux; see [Signing](#signing--macos-auto-update) for macOS)
 

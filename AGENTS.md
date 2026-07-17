@@ -232,7 +232,7 @@ already in `node_modules` instead of running `npm ci` first.
 | `preload.js` | Secure IPC bridge — exposes `ninjaApi.getCachedData()`, `getLiveCategories()`, `getLeagues()`, `startFetch()`, `fetchCategory()`, `openExternal()`, `setZoomFactor()`, `clearCache()`, `setHotkeyEnabled()`, `onFetchProgress()`, `onUpdateDownloaded()`, `restartToUpdate()` to renderer |
 | `renderer/index.html` | Game switcher (2 tabs, POE 2 active by default), active label, search input + refresh/settings buttons, category sidebar + results area side by side |
 | `renderer/renderer.js` | Pure browser-side logic — game switching, category sidebar (incl. per-row force-refresh icon + the "⚔ Mechanic Rewards" entry), the Mechanic Rewards multi-select view (grouping/merge toggle, value sort, consumables filter), the exchange-rate ticker + Movers & Shakers board, per-row liquidity dot / favorites gain-loss / open-on-trade (⇄), compact-density + skeleton loaders, 300ms debounced search, favorites, price alerts, settings panel, fuzzy search fallback, keyboard navigation |
-| `renderer/styles.css` | Ledger theme (default, PoE-material palette) plus several other selectable themes, colors only; active tab gets glow effect; focused rows get accent outline |
+| `renderer/styles.css` | Ledger theme (default, PoE-material palette) plus several other selectable themes, colors only; active tab gets glow effect; focused rows get accent outline. Also owns the item-list **grid**: `.category-items` defines the column tracks, `.item-row` is a `subgrid` so columns align + autofit; `body.columns-right` / `body.density-compact` retarget those tracks/rows |
 | `data/item-descriptions.json` | Committed static item-description data for currency-type categories (see "Item-description tooltips" above) — regenerate with `scripts/discover-currency-descriptions.js` |
 | `lib/mechanic-drops.js` | Loader for the committed mechanic→drops map (Mechanic Rewards view); reads `data/mechanic-drops.json` at require-time, served to the renderer via main.js's `get-mechanic-map` IPC |
 | `data/mechanic-drops.json` | Committed, hand-verified mechanic→drops map, keyed by game (POE1 ~21 mechanics, POE2 ~9; see "Mechanic Rewards" below) — re-seed with `scripts/discover-mechanic-drops.js` |
@@ -286,9 +286,18 @@ not a bug.
   (a real SVG shape difference, not just a color change, matching the ★/☆ favorite-star pattern)
 - Keyboard navigation: ArrowUp/Down moves focus through results (skips rows inside a collapsed section), Enter opens selected item
 - Item rows also carry a per-row **liquidity dot** (relative volume/listing count within the category),
-  a **▲/▼ since-favorited** delta, and an **open-on-trade (⇄)** button (pathofexile.com/trade); each row
-  is **left-aligned by default**, with a Settings toggle to push the data columns to the right, and a
-  Settings **compact-density** toggle (hides the base-type line, kept in the tooltip)
+  a **▲/▼ since-favorited** delta, and an **open-on-trade (⇄)** button (pathofexile.com/trade). The list
+  lays out as a **real grid with aligned, autofitting columns** (name · trend · price · change · tag ·
+  actions): the container defines the column tracks and each `.item-row` is a `subgrid` so cells line up
+  vertically across every row. The name track is `max-content`, so the column is always as wide as the
+  **longest name in the list and item names are never cut off, regardless of window size** — if the
+  longest name plus the data columns exceed the window, `.category-items` scrolls **horizontally**
+  (`overflow-x: auto`) rather than truncating anything; the action buttons sit in an aligned column on
+  the right. A Settings **left/right column** toggle (`body.columns-right`, swaps the container's
+  `grid-template-columns` — its name track is `minmax(max-content, 1fr)`, still never below the longest
+  name) moves the data columns to the far right; both positions stay aligned. A Settings
+  **compact-density** toggle (`body.density-compact`) hides the base-type line (kept in the tooltip) and
+  tightens the rows.
 - A persistent **exchange-rate ticker** (Divine⇄base per game) sits under the status bar; the home
   overview shows **Movers & Shakers** (7-day top gainers/losers, value-floored); loading states use
   **shimmer skeletons**; **Mirror of Kalandra** is one of the selectable themes
@@ -361,6 +370,13 @@ config lives in `.claude/settings.local.json`, which is **not** committed.
 - `github` — configured per-user at **local scope** (`claude mcp add … -s local -H "Authorization:
   Bearer <PAT>"`) so the token never enters the repo; intentionally not in `.mcp.json`.
 - `chrome-devtools` — plugin-provided; allow-listed in `.claude/settings.local.json`.
+
+**Commit attribution:** commits are authored solely by the repo's own git user — never add a
+`Co-Authored-By: Claude …` trailer or any "Generated with Claude" note (see CLAUDE.md's attribution
+policy, mirrored in every subagent's `## Commits` section). If Claude has already landed on the GitHub
+repo's **Contributors sidebar**, [docs/github-contributor-hygiene.md](docs/github-contributor-hygiene.md)
+is the removal runbook — note the sidebar is a separate co-author index from the REST `/contributors`
+list, so a history rewrite + force-push alone won't clear it (a visibility-toggle reindex does).
 
 ## Potential Pitfalls
 
