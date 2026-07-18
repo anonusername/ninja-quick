@@ -185,6 +185,23 @@
           ]
         }
       ]
+    },
+    "vaal": {
+      "label": "Vaal Temple",
+      "consumables": [],
+      "sources": [
+        {
+          "name": "Atziri, the Red Queen",
+          "kind": "pinnacle-boss",
+          "uniques": [
+            "Atziri's Contempt",
+            "Atziri's Rule",
+            "Atziri's Splendour",
+            "Drillneck",
+            "Flesh Crucible"
+          ]
+        }
+      ]
     }
   },
   "poe1": {

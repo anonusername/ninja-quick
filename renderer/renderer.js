@@ -1730,6 +1730,43 @@ function pendingMechanicCategories(gameData) {
   return pending;
 }
 
+// POE2 endgame map mechanics are gated by Precursor Tablets slotted into Atlas towers, and
+// poe.ninja exposes them as the `precursor-tablets` category — so the tablets on the market are a
+// live signal for *which* map mechanics are actually in the game this league. This maps a tablet's
+// base type to the matching mechanic key in data/mechanic-drops.json. Overseer/Irradiated tablets
+// are generic wildcards (map bosses / +area level), not a farmable mechanic, so they're unmapped.
+// POE1 has no tablets; this is POE2-only. Used purely to *annotate + flag gaps* (not to build the
+// list) — the hand-verified mechanic map stays the source of truth. See AGENTS.md "Mechanic Rewards".
+const POE2_TABLET_MECHANICS = {
+  'Breach Tablet': 'breach',
+  'Ritual Tablet': 'ritual',
+  'Delirium Tablet': 'delirium',
+  'Abyss Tablet': 'abyss',
+  'Expedition Tablet': 'expedition',
+  'Temple Tablet': 'vaal',
+};
+const POE2_TABLET_WILDCARDS = new Set(['Overseer Tablet', 'Irradiated Tablet']);
+
+/**
+ * Derive which map mechanics are "included" this league from the cached `precursor-tablets` rows.
+ * Returns null when there's no tablet data cached yet (POE1, or POE2 before that category is
+ * fetched) so callers can skip the annotation gracefully. `includedKeys` are mechanic keys a tablet
+ * confirms are live; `unknownTablets` are tablet base types with no mapping and not a known wildcard
+ * (a mechanic GGG may have added that the map doesn't cover yet).
+ */
+function detectTabletMechanics(gameData) {
+  const cat = gameData['precursor-tablets'];
+  if (!cat || !Array.isArray(cat.items) || cat.items.length === 0) return null;
+  const seenTypes = new Set(cat.items.map((i) => i.name));
+  const includedKeys = new Set();
+  const unknownTablets = [];
+  for (const type of seenTypes) {
+    if (POE2_TABLET_MECHANICS[type]) includedKeys.add(POE2_TABLET_MECHANICS[type]);
+    else if (!POE2_TABLET_WILDCARDS.has(type)) unknownTablets.push(type);
+  }
+  return { includedKeys, unknownTablets };
+}
+
 /** The Mechanic Rewards panel: mechanic checkboxes (+ Select All/None + Mechanic Consumables
  * toggle), then either the aggregated consumables list or the mechanics ranked by top-drop value. */
 function renderMechanicsView(query) {
@@ -1739,6 +1776,7 @@ function renderMechanicsView(query) {
   const gameData = cachedData[currentGame] || {};
   const rates = gameData.__meta && gameData.__meta.rates;
   const keys = Object.keys(mechanicMap);
+  const tablets = detectTabletMechanics(gameData); // null unless POE2 precursor-tablets are cached
 
   if (keys.length === 0) {
     resultsContainer.innerHTML = `<div class="empty-state"><p>No mechanic data available for ${currentGame.toUpperCase()}.</p></div>`;
@@ -1838,9 +1876,34 @@ function renderMechanicsView(query) {
     });
     label.appendChild(cb);
     label.append(` ${mech.label || key}`);
+    // Flag mechanics a precursor tablet confirms are live in maps this league (see detectTabletMechanics).
+    if (tablets && tablets.includedKeys.has(key)) {
+      const badge = document.createElement('span');
+      badge.className = 'mechanics-tablet-badge';
+      badge.textContent = '🪧 in maps';
+      badge.title = 'A precursor tablet for this mechanic is on the market this league';
+      label.appendChild(badge);
+    }
     checks.appendChild(label);
   }
   resultsContainer.appendChild(checks);
+
+  // ── Tablet-gap banner: a tablet is on the market for a mechanic the map data doesn't cover. This
+  // is the "figure out which mechanics are included" check — it auto-catches a mechanic GGG added
+  // (or one we forgot to seed, like Vaal was) rather than silently omitting it. ──
+  if (tablets) {
+    const missingEntries = [...tablets.includedKeys].filter((k) => !mechanicMap[k]);
+    const gaps = [
+      ...missingEntries.map((k) => `${k} (tablet present, no mechanic entry)`),
+      ...tablets.unknownTablets.map((t) => `${t} (unmapped tablet)`),
+    ];
+    if (gaps.length > 0) {
+      const banner = document.createElement('div');
+      banner.className = 'mechanics-banner mechanics-tablet-gap';
+      banner.textContent = `Precursor tablets found with no matching mechanic: ${gaps.join(', ')} — data/mechanic-drops.json may need updating.`;
+      resultsContainer.appendChild(banner);
+    }
+  }
 
   // ── Partial-cache banner ──
   const pending = pendingMechanicCategories(gameData);
@@ -2297,6 +2360,21 @@ function renderSettings() {
   notifRow.innerHTML = `<span>Price alert notifications</span>`;
   notifRow.appendChild(notifCheckbox);
   box.appendChild(notifRow);
+
+  // Web-request debug window — a separate window listing every HTTP request the app makes (opens/
+  // closes a real window main-process side; the checkbox reflects whether it's currently open).
+  const debugRow = document.createElement('label');
+  debugRow.className = 'settings-row';
+  const debugCheckbox = document.createElement('input');
+  debugCheckbox.type = 'checkbox';
+  window.ninjaApi.isRequestDebugOpen().then((open) => { debugCheckbox.checked = open; }).catch(() => {});
+  debugCheckbox.addEventListener('change', async () => {
+    const open = await window.ninjaApi.toggleRequestDebug();
+    debugCheckbox.checked = open; // reflect actual state (e.g. window closed directly)
+  });
+  debugRow.innerHTML = `<span>Web request debug window (shows every request the app makes)</span>`;
+  debugRow.appendChild(debugCheckbox);
+  box.appendChild(debugRow);
 
   // Reset actions
   const resetHeading = document.createElement('div');

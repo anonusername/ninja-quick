@@ -7,7 +7,7 @@ Cross-platform (Windows, macOS, Linux) desktop client for [poe.ninja](https://po
 - **Game Switcher** — toggle between POE 1 and POE 2 contexts; persists across sessions. POE 2 is the default/priority game. Several themes available (Settings → Theme), Ledger by default.
 - **Live Category Sidebar** — a permanent left-hand nav (mirroring poe.ninja's own economy-page sidebar), sourced from a committed per-game category list and refined by a live scrape in the background — PoE leagues add/remove economy categories every few months. Super categories (All Uniques, All Gems, etc., plus a "Search All" that merges everything) sit on top, individual categories below. Click a category to see its full item list immediately, auto-fetching it first if needed.
 - **Item-Description Tooltips** — hover an item's name to see its PoE-style description (base type, level requirement, mods, flavor text), for uniques, gems, and currency-type items alike. Base type is also always shown under the name, so same-named variants are distinguishable at a glance.
-- **Mechanic Rewards (POE1 + POE2)** — a "⚔ Mechanic Rewards" view (top of the sidebar in both games — POE1 has ~21 mechanics, POE2 ~9) that multi-selects that game's endgame mechanics (checkbox per mechanic + Select all / none) and, for each, lists its tradeable consumable drops and its mechanic-boss / pinnacle-boss / encounter-locked uniques (tagged with the source NPC/encounter), ranked by top single-drop value. A **grouping toggle** switches between per-mechanic sections and one merged, mechanic-tagged list; a **value sort** orders every mechanic the same way; and a **"Consumables only"** filter drops the boss uniques. The ranking is an explicit market-price heuristic (poe.ninja has no drop rates) and runs against already-cached data, so it makes no extra requests.
+- **Mechanic Rewards (POE1 + POE2)** — a "⚔ Mechanic Rewards" view (top of the sidebar in both games — POE1 has ~21 mechanics, POE2 ~10 including the Vaal Temple) that multi-selects that game's endgame mechanics (checkbox per mechanic + Select all / none) and, for each, lists its tradeable consumable drops and its mechanic-boss / pinnacle-boss / encounter-locked uniques (tagged with the source NPC/encounter), ranked by top single-drop value. A **grouping toggle** switches between per-mechanic sections and one merged, mechanic-tagged list; a **value sort** orders every mechanic the same way; and a **"Consumables only"** filter drops the boss uniques. For POE2, the view reads the live **Precursor Tablets** on the market to badge which map mechanics are in the game this league ("🪧 in maps"). The ranking is an explicit market-price heuristic (poe.ninja has no drop rates) and runs against already-cached data, so it makes no extra requests.
 - **Active Game+Leagues** — pick which game+league combos stay updated in the background (Settings → Active leagues), so the app doesn't spend bandwidth refreshing leagues you don't play. Defaults to POE2 · Runes of Aldur (SC).
 - **Unified Search** — single text input searches across currency, uniques, fragments, essences, etc.; 300ms debounce; the search bar always shows which category/super-category you're currently in
 - **Keyboard Navigation** — ArrowUp/Down to move through results, Enter opens the item on poe.ninja in your system browser
@@ -19,6 +19,7 @@ Cross-platform (Windows, macOS, Linux) desktop client for [poe.ninja](https://po
 - **Open on the official trade site** — a ⇄ button on each row opens pathofexile.com/trade pre-filtered for that item, so you can go straight from price to buying.
 - **Aligned, autofitting columns** — the item list lays out as a real grid: name, trend, price, change, and actions each line up vertically across rows and autofit to content, with a Settings toggle to push the data columns to the left or right.
 - **Compact density + skeleton loaders** — a Settings toggle for denser rows (~30–40% more per screen), and shimmering skeleton placeholders while data loads.
+- **Web request debug window** — a Settings toggle opens a separate window that live-lists every HTTP request the app makes (method, status, type, duration, size, host, URL), with a filter and terminal-style tail-follow autoscroll — handy for seeing exactly what the app is fetching.
 - **Auto-update** — packaged builds check GitHub Releases for updates at startup and every 4 hours after (Windows/Linux; see [Signing](#signing--macos-auto-update) for macOS)
 
 ## Download
@@ -96,8 +97,9 @@ npm test
 - **Mechanic Rewards data** (which mechanic drops what, per game) is a third committed, hand-verified
   dataset, `data/mechanic-drops.json` — seeded from each game's wiki Cargo API (POE1 → poewiki.net,
   POE2 → poe2wiki.net) by `npx electron scripts/discover-mechanic-drops.js` (unset
-  `ELECTRON_RUN_AS_NODE` first) and curated by hand. Re-run + re-verify at the start of a new league,
-  when GGG adds mechanics/uniques.
+  `ELECTRON_RUN_AS_NODE` first) and curated by hand. Both wikis are Cloudflare-gated, so the seed
+  drives a hidden browser window to pass the challenge, logging every request it makes. Re-run +
+  re-verify at the start of a new league, when GGG adds mechanics/uniques.
 
 ## Releasing
 

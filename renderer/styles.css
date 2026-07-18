@@ -1474,6 +1474,23 @@ mark {
   font-size: 12px;
 }
 
+/* "in maps this league" marker on a mechanic whose precursor tablet is on the market (POE2). */
+.mechanics-tablet-badge {
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  color: var(--gold);
+  background: var(--gold-glow, var(--bg-tertiary));
+  white-space: nowrap;
+}
+
+/* Gap warning: a tablet exists for a mechanic the committed map doesn't cover — needs a data update. */
+.mechanics-tablet-gap {
+  background: var(--danger-glow, var(--bg-tertiary));
+  color: var(--danger, var(--text-primary));
+}
+
 .mechanics-top {
   margin-left: auto;
   margin-right: 8px;

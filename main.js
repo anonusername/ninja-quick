@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, globalShortcut, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const ninjaApi = require('./lib/ninja-api');
@@ -318,6 +318,154 @@ function initAutoUpdater() {
 
 ipcMain.handle('restart-to-update', () => {
   autoUpdater.quitAndInstall();
+});
+
+// ── Web-request debug window ────────────────
+//
+// A developer/support tool: a separate window that lists every HTTP request the app process makes
+// — the poe.ninja JSON API calls (lib/ninja-api.js's net.request), the hidden category-discovery
+// BrowserWindow's page loads, the electron-updater GitHub feed, and any other host (wiki included,
+// were it ever hit at runtime). Capture is host-agnostic on purpose. It's driven off
+// session.defaultSession.webRequest, which — verified — observes main-process net.request too, not
+// just renderer traffic, so it's the one place that sees ALL of it.
+//
+// Attach-on-open / detach-on-close: the listeners (and the per-request work) exist only while the
+// window is open, so the feature is genuinely zero-overhead when off, and "capture starts when I
+// open it" is the normal debug-tool semantic. Each open is a fresh capture session.
+
+let debugWindow = null;
+let debugReady = false; // the window's webContents has finished loading and can receive sends
+let debugEvents = []; // this session's events (start/end), replayed to the window as a seed on load
+const debugPending = new Map(); // request id -> { startedAt } to compute duration on completion
+const DEBUG_EVENT_CAP = 3000;
+
+function pushDebugEvent(evt) {
+  debugEvents.push(evt);
+  if (debugEvents.length > DEBUG_EVENT_CAP) debugEvents.shift();
+  if (debugReady && debugWindow && !debugWindow.isDestroyed()) {
+    debugWindow.webContents.send('debug-request', evt);
+  }
+}
+
+function contentLength(headers) {
+  if (!headers) return null;
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === 'content-length') {
+      const raw = Array.isArray(headers[key]) ? headers[key][0] : headers[key];
+      const n = parseInt(raw, 10);
+      return Number.isFinite(n) ? n : null;
+    }
+  }
+  return null;
+}
+
+function attachRequestCapture() {
+  const wr = session.defaultSession.webRequest;
+  const filter = { urls: ['*://*/*'] };
+
+  // onBeforeRequest is a blocking listener (must call the callback) — it fires earliest and for
+  // every request including cache hits, giving us the method/url/type the moment it starts.
+  wr.onBeforeRequest(filter, (details, callback) => {
+    debugPending.set(details.id, { startedAt: Date.now() });
+    pushDebugEvent({
+      phase: 'start',
+      id: details.id,
+      method: details.method,
+      url: details.url,
+      resourceType: details.resourceType,
+      startedAt: Date.now(),
+    });
+    callback({});
+  });
+
+  wr.onCompleted(filter, (details) => {
+    const started = debugPending.get(details.id);
+    debugPending.delete(details.id);
+    pushDebugEvent({
+      phase: 'end',
+      id: details.id,
+      status: details.statusCode,
+      statusLine: details.statusLine,
+      fromCache: details.fromCache,
+      size: contentLength(details.responseHeaders),
+      endedAt: Date.now(),
+      durationMs: started ? Date.now() - started.startedAt : null,
+    });
+  });
+
+  wr.onErrorOccurred(filter, (details) => {
+    const started = debugPending.get(details.id);
+    debugPending.delete(details.id);
+    pushDebugEvent({
+      phase: 'end',
+      id: details.id,
+      error: details.error,
+      endedAt: Date.now(),
+      durationMs: started ? Date.now() - started.startedAt : null,
+    });
+  });
+}
+
+function detachRequestCapture() {
+  // Passing null removes the single listener each event allows — nothing else uses webRequest.
+  const wr = session.defaultSession.webRequest;
+  wr.onBeforeRequest(null);
+  wr.onCompleted(null);
+  wr.onErrorOccurred(null);
+  debugPending.clear();
+}
+
+function createDebugWindow() {
+  debugReady = false;
+  debugEvents = [];
+  debugWindow = new BrowserWindow({
+    width: 900,
+    height: 600,
+    title: 'ninja-quick — Web Requests',
+    backgroundColor: '#12100c',
+    icon: path.join(__dirname, 'assets/ninja-quick-icon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'renderer/debug-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  debugWindow.setMenuBarVisibility(false);
+  debugWindow.loadFile(path.join(__dirname, 'renderer/debug.html'));
+  debugWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+  // Requests can be captured before the page is ready to receive them — replay the buffer once it
+  // has loaded, then stream live (pushDebugEvent gates live sends on debugReady).
+  debugWindow.webContents.on('did-finish-load', () => {
+    debugReady = true;
+    if (!debugWindow || debugWindow.isDestroyed()) return;
+    debugWindow.webContents.send('debug-seed', debugEvents.slice());
+  });
+
+  attachRequestCapture();
+
+  debugWindow.on('closed', () => {
+    detachRequestCapture();
+    debugWindow = null;
+    debugReady = false;
+    debugEvents = [];
+  });
+}
+
+ipcMain.handle('toggle-request-debug', () => {
+  if (debugWindow && !debugWindow.isDestroyed()) {
+    debugWindow.close();
+    return false;
+  }
+  createDebugWindow();
+  return true;
+});
+
+ipcMain.handle('is-request-debug-open', () => !!(debugWindow && !debugWindow.isDestroyed()));
+
+// The debug window's "Clear" button empties the shared buffer too, so a later seed doesn't refill.
+ipcMain.on('debug-clear', () => {
+  debugEvents = [];
 });
 
 // ── Init ───────────────────────────────────

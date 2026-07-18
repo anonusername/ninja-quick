@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.5 — 2026-07-17
+
+- **Item names never truncate** — the item list's name column now sizes to the longest name in the
+  list and the list scrolls horizontally when it doesn't fit, so no item name is ever cut off,
+  regardless of window size (the left/right column toggle still applies).
+- **Web request debug window** — a new Settings toggle opens a separate window that live-lists every
+  HTTP request the app makes (method, status, resource type, duration, size, host, URL), with a
+  filter and terminal-style tail-follow autoscroll (scroll up to pause, return to the bottom to
+  resume).
+- **Vaal Temple added to Mechanic Rewards (POE2)** — the Vaal Temple (Atziri, the Red Queen) is now
+  ranked alongside the other POE2 mechanics, bringing POE2 to 10 endgame mechanics.
+- **Tablet detection (POE2)** — the Mechanic Rewards view reads the live Precursor Tablets on the
+  market to badge which map mechanics are in the game this league ("🪧 in maps"), and flags any tablet
+  type that has no matching mechanic in the data.
+- **Reseed tooling** — `scripts/discover-mechanic-drops.js` now passes both wikis' Cloudflare
+  challenge via a hidden browser window and logs every request it makes (developer maintenance).
+
 ## 1.1.4 — 2026-07-14
 
 - **Aligned item columns** — the item list now lays out as a real grid: each column (name, trend,

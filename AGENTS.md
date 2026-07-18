@@ -86,7 +86,9 @@ sort, and a "Consumables only" filter; see the "View controls" bullet below) ans
 endgame mechanic is worth farming, and what drops from it?"*. Available in **both games** — POE1 has
 ~21 mechanics (Atziri, Shaper & Elder, Sirus, Exarch & Eater, Maven, Delve, Incursion, Sanctum,
 Abyss, Blight, Delirium, Ultimatum, Ritual, Heist, Expedition, Legion, Labyrinth, Synthesis, Essence,
-Bestiary, Breach), POE2 has ~9. It lists each mechanic's tradeable **consumable** categories plus its
+Bestiary, Breach), POE2 has ~10 (Breach, Ritual, Delirium, Expedition, Abyss, Essence, Trial of the
+Sekhemas, Trial of Chaos, Arbiter of Ash, and the **Vaal Temple** — Atziri, the Red Queen). It lists
+each mechanic's tradeable **consumable** categories plus its
 mechanic-boss / pinnacle-boss / encounter-**locked** uniques (world drops like Mageblood are
 intentionally excluded), and ranks mechanics by **top single-drop value** — the most expensive locked
 drop in the pool, normalized to the league's primary currency.
@@ -113,6 +115,17 @@ drop rates, so the UI labels it *"top single-drop value (market price, not drop 
   `desc`) applied identically to the item rows in every mechanic and the merged list — the mechanic
   *sections* stay ordered by top-drop value regardless. The merged list omits unpriced uniques (no
   sort key); they remain in the by-mechanic view.
+- **POE2 tablet detection** (`detectTabletMechanics`, renderer): POE2's map mechanics are gated by
+  **Precursor Tablets** slotted into Atlas towers, and poe.ninja exposes them as the `precursor-tablets`
+  category — so the tablets on the market are a live signal for *which* map mechanics are in the game
+  this league. A `tablet base type → mechanic key` map (`POE2_TABLET_MECHANICS`:
+  Breach/Ritual/Delirium/Abyss/Expedition, and **Temple → `vaal`**; Overseer/Irradiated are generic
+  wildcards — map bosses / +area level — and are intentionally unmapped) drives two annotations: a
+  **"🪧 in maps"** badge on each mechanic a tablet confirms is live, and a **gap banner** when a tablet
+  exists for a mechanic key the committed map doesn't cover — which auto-catches a mechanic GGG added
+  (or one we forgot to seed; Vaal was originally missing). It only **annotates + flags** — the
+  hand-verified map stays the source of truth (not a tablet-derived list, so a mechanic never vanishes
+  just because its tablet is absent from one economy snapshot). POE1 has no tablets; this is POE2-only.
 - **POE1 specifics**: POE1's map is far broader and needs two curation transforms POE2 mostly didn't:
   (1) shared exchange categories (`fragments`, split across Atziri/Shaper-Elder/Sirus/Maven/Legion/…)
   use **`ids` subsets** (stable slugs, fetched from the live exchange endpoint) rather than the whole
@@ -124,7 +137,12 @@ drop rates, so the UI labels it *"top single-drop value (market price, not drop 
 - **Seeding**: `scripts/discover-mechanic-drops.js` queries each game's wiki Cargo API (POE1 →
   poewiki.net, POE2 → poe2wiki.net; `action=cargoquery`, the `items.drop_text` field — the only
   structured "locked-drop" signal; poedb.tw has no JSON API) into a per-game
-  `data/mechanic-drops.candidate.json` (POE1 yields ~500 uniques with drop_text, POE2 ~100). That
+  `data/mechanic-drops.candidate.json` (POE1 yields ~500 uniques with drop_text, POE2 ~100). Both
+  wikis now sit behind a **Cloudflare JS challenge** (HTTP 200 + a "Making sure you're not a bot!"
+  HTML page) that plain `net`/WebFetch requests can't pass, so the scrape drives a **hidden
+  `BrowserWindow`** (real Chromium auto-solves the challenge, one window reused per run) and reads the
+  JSON out of the rendered body; every request is **logged** (URL + status/size/timing) to the console
+  and `data/.discover-mechanic-drops.log`. That
   candidate is **noisy** (drop_text carries HTML hoverbox markup, and items whose mod text embeds
   wikilinks over-produce bogus "sources") — it is hand-verified into the committed file, never
   shipped raw. Like `lib/categories.js`, **re-run + re-verify at each new league** (GGG adds
@@ -225,23 +243,24 @@ already in `node_modules` instead of running `npm ci` first.
 
 | File | Purpose |
 |------|---------|
-| `main.js` | Main process — creates the window, IPC handlers for data fetching & caching, live category discovery caching/TTL, `open-external` (opens poe.ninja links in the system browser) |
+| `main.js` | Main process — creates the window, IPC handlers for data fetching & caching, live category discovery caching/TTL, `open-external` (opens poe.ninja links in the system browser), and the **web-request debug window** (a `session.defaultSession.webRequest` capture streamed to a separate window; `toggle-request-debug` IPC) |
 | `lib/ninja-api.js` | poe.ninja JSON API client — league detection, adaptive endpoint/type resolution, normalized item shape |
 | `lib/category-discovery.js` | Live category-list scraper — hidden `BrowserWindow`, extracts category slugs+labels from the real economy-page nav; the freshness layer on top of `lib/categories.js` |
 | `lib/categories.js` | Committed, curated category map per game — the source of truth on a fresh install; regenerate via `npm run generate-categories` |
-| `preload.js` | Secure IPC bridge — exposes `ninjaApi.getCachedData()`, `getLiveCategories()`, `getLeagues()`, `startFetch()`, `fetchCategory()`, `openExternal()`, `setZoomFactor()`, `clearCache()`, `setHotkeyEnabled()`, `onFetchProgress()`, `onUpdateDownloaded()`, `restartToUpdate()` to renderer |
+| `preload.js` | Secure IPC bridge — exposes `ninjaApi.getCachedData()`, `getLiveCategories()`, `getLeagues()`, `startFetch()`, `fetchCategory()`, `openExternal()`, `setZoomFactor()`, `clearCache()`, `setHotkeyEnabled()`, `toggleRequestDebug()`, `isRequestDebugOpen()`, `onFetchProgress()`, `onUpdateDownloaded()`, `restartToUpdate()` to renderer |
 | `renderer/index.html` | Game switcher (2 tabs, POE 2 active by default), active label, search input + refresh/settings buttons, category sidebar + results area side by side |
-| `renderer/renderer.js` | Pure browser-side logic — game switching, category sidebar (incl. per-row force-refresh icon + the "⚔ Mechanic Rewards" entry), the Mechanic Rewards multi-select view (grouping/merge toggle, value sort, consumables filter), the exchange-rate ticker + Movers & Shakers board, per-row liquidity dot / favorites gain-loss / open-on-trade (⇄), compact-density + skeleton loaders, 300ms debounced search, favorites, price alerts, settings panel, fuzzy search fallback, keyboard navigation |
+| `renderer/renderer.js` | Pure browser-side logic — game switching, category sidebar (incl. per-row force-refresh icon + the "⚔ Mechanic Rewards" entry), the Mechanic Rewards multi-select view (grouping/merge toggle, value sort, consumables filter, POE2 tablet detection → "🪧 in maps" badge + gap banner), the exchange-rate ticker + Movers & Shakers board, per-row liquidity dot / favorites gain-loss / open-on-trade (⇄), compact-density + skeleton loaders, 300ms debounced search, favorites, price alerts, settings panel (incl. the web-request debug toggle), fuzzy search fallback, keyboard navigation |
 | `renderer/styles.css` | Ledger theme (default, PoE-material palette) plus several other selectable themes, colors only; active tab gets glow effect; focused rows get accent outline. Also owns the item-list **grid**: `.category-items` defines the column tracks, `.item-row` is a `subgrid` so columns align + autofit; `body.columns-right` / `body.density-compact` retarget those tracks/rows |
+| `renderer/debug.html` · `debug.js` · `debug-preload.js` | The **web-request debug window** — a separate `BrowserWindow` (its own `contextIsolation:true` preload) that live-lists every HTTP request the app makes (method/status/type/duration/size/host/URL), with filter, Clear, and tail-follow autoscroll. Opened via Settings; capture attaches on open / detaches on close (`main.js` `webRequest`) |
 | `data/item-descriptions.json` | Committed static item-description data for currency-type categories (see "Item-description tooltips" above) — regenerate with `scripts/discover-currency-descriptions.js` |
 | `lib/mechanic-drops.js` | Loader for the committed mechanic→drops map (Mechanic Rewards view); reads `data/mechanic-drops.json` at require-time, served to the renderer via main.js's `get-mechanic-map` IPC |
-| `data/mechanic-drops.json` | Committed, hand-verified mechanic→drops map, keyed by game (POE1 ~21 mechanics, POE2 ~9; see "Mechanic Rewards" below) — re-seed with `scripts/discover-mechanic-drops.js` |
+| `data/mechanic-drops.json` | Committed, hand-verified mechanic→drops map, keyed by game (POE1 ~21 mechanics, POE2 ~10 incl. the Vaal Temple; see "Mechanic Rewards" below) — re-seed with `scripts/discover-mechanic-drops.js` |
 | `CHANGELOG.md` | Version history; updated alongside every `package.json` version bump, before tagging |
 | `.github/workflows/release.yml` | Tag-triggered CI: runs tests, then builds/publishes Windows/macOS/Linux via `electron-builder` |
 | `build-windows-release.ps1` | Local-only Windows build helper (see "Releasing" above) |
 | `scripts/discover-api.js` | Re-discovers poe.ninja's live economy-data API and regenerates `docs/api-endpoints.md` — run this if data goes empty |
 | `scripts/discover-currency-descriptions.js` | Re-scrapes currency-type item descriptions into `data/item-descriptions.json` — run after a GGG patch adds new currency-type items, or if a category is missing tooltip text that poe.ninja's own site does show |
-| `scripts/discover-mechanic-drops.js` | Seeds `data/mechanic-drops.candidate.json` from each game's wiki Cargo API (POE1 → poewiki.net, POE2 → poe2wiki.net; `drop_text` field) — re-run + re-verify into `data/mechanic-drops.json` at each new league |
+| `scripts/discover-mechanic-drops.js` | Seeds `data/mechanic-drops.candidate.json` from each game's wiki Cargo API (POE1 → poewiki.net, POE2 → poe2wiki.net; `drop_text` field) via a hidden `BrowserWindow` (both wikis are Cloudflare-gated now), logging every request — re-run + re-verify into `data/mechanic-drops.json` at each new league |
 | `test-integration.js` | Integration tests against the live API — league detection, category fetch, cache round-trip, search simulation, plus offline Mechanic Rewards data/ranking checks |
 
 ### App icon & system tray
@@ -301,6 +320,13 @@ not a bug.
 - A persistent **exchange-rate ticker** (Divine⇄base per game) sits under the status bar; the home
   overview shows **Movers & Shakers** (7-day top gainers/losers, value-floored); loading states use
   **shimmer skeletons**; **Mirror of Kalandra** is one of the selectable themes
+- Settings → **"Web request debug window"** opens a separate window that live-lists every HTTP request
+  the app makes (the poe.ninja API calls, the hidden category-discovery loads, the update feed, any
+  host) — method/status/type/duration/size/host/URL, with a filter, Clear, and terminal-style
+  tail-follow autoscroll (scroll up pauses, scroll to bottom resumes). Capture is host-agnostic and
+  attaches only while the window is open. Note: this shows the **running app**'s traffic — the offline
+  `discover-*` maintenance scripts run as separate processes, so their wiki requests aren't shown here
+  (they log to console + their own `.log` file instead)
 
 ## Build & Run Commands
 

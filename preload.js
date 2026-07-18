@@ -41,6 +41,11 @@ contextBridge.exposeInMainWorld('ninjaApi', {
   // localStorage-persisted preference; main.js holds no independent settings store.
   setHotkeyEnabled: (enabled) => ipcRenderer.invoke('set-hotkey-enabled', enabled),
 
+  // Web-request debug window (Settings → "Web request debug window"). Opens/closes a separate
+  // window that lists every HTTP request the app makes; returns the resulting open/closed state.
+  toggleRequestDebug: () => ipcRenderer.invoke('toggle-request-debug'),
+  isRequestDebugOpen: () => ipcRenderer.invoke('is-request-debug-open'),
+
   // Events from main process
   onFetchProgress: (callback) => {
     const handler = (_event, data) => callback(data);

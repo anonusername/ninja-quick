@@ -7,8 +7,14 @@
  * poedb.tw has no JSON API (its /api path 404s). The one structured source is each game's wiki
  * MediaWiki Cargo API (POE1 → poewiki.net, POE2 → poe2wiki.net; `/w/api.php?action=cargoquery`), whose
  * `items` table exposes a `drop_text` field — e.g. "Drops from [[Xesht, We That Are One]]", "Drops in
- * the [[Simulacrum]]" — that is null for world drops. It's reachable with a browser User-Agent
- * (WebFetch/plain fetch get Cloudflare-403'd; Electron's `net`, on Chromium's stack, is not).
+ * the [[Simulacrum]]" — that is null for world drops.
+ *
+ * Both wikis now sit behind a Cloudflare JS challenge that returns HTTP 200 with a "Making sure
+ * you're not a bot!" HTML interstitial to plain requests — WebFetch, and (as of this writing)
+ * Electron's `net` too, despite an earlier note here to the contrary. So the fetch drives a hidden
+ * `BrowserWindow` (real Chromium, which auto-solves the challenge and sets the `cf_clearance`
+ * cookie), loads each Cargo API URL, and reads the JSON straight out of `document.body.innerText`.
+ * One window is reused per run, so only the first request pays the ~1–5s challenge cost.
  *
  * `drop_text` coverage is incomplete and the raw field frequently contains HTML hoverbox markup and
  * area-only sources (Simulacrum is an encounter, not an NPC), so this script only *seeds* a
@@ -22,7 +28,7 @@
  * Run: npx electron scripts/discover-mechanic-drops.js   (unset ELECTRON_RUN_AS_NODE first)
  */
 
-const { app, net } = require('electron');
+const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -49,31 +55,49 @@ function log(line) {
   fs.appendFileSync(LOG_FILE, msg + '\n');
 }
 
-function httpGetJson(url) {
-  return new Promise((resolve, reject) => {
-    const request = net.request({ method: 'GET', url });
-    request.setHeader('User-Agent', UA);
-    const timer = setTimeout(() => {
-      request.abort();
-      reject(new Error(`timeout after ${REQUEST_TIMEOUT_MS}ms: ${url}`));
-    }, REQUEST_TIMEOUT_MS);
-    request.on('response', (response) => {
-      let raw = '';
-      response.on('data', (chunk) => (raw += chunk));
-      response.on('end', () => {
-        clearTimeout(timer);
-        if (response.statusCode !== 200) return reject(new Error(`HTTP ${response.statusCode}: ${url}`));
-        try {
-          resolve(JSON.parse(raw));
-        } catch (e) {
-          reject(new Error(`invalid JSON from ${url}: ${e.message}`));
-        }
-      });
-      response.on('error', reject);
-    });
-    request.on('error', reject);
-    request.end();
-  });
+const POLL_INTERVAL_MS = 1000;
+
+let scrapeWin = null;
+function getScrapeWindow() {
+  if (scrapeWin && !scrapeWin.isDestroyed()) return scrapeWin;
+  scrapeWin = new BrowserWindow({ show: false, width: 1024, height: 768 });
+  scrapeWin.webContents.setUserAgent(UA);
+  return scrapeWin;
+}
+
+/**
+ * GET a Cargo API URL through a hidden BrowserWindow so Cloudflare's JS challenge is auto-solved,
+ * then parse the JSON out of the rendered body. Every request is logged (URL out, then size/timing
+ * back) so a reseed run leaves an auditable trail of exactly what it hit — the offline-maintenance
+ * counterpart to the in-app web-request debug window (console + data/.discover-mechanic-drops.log).
+ */
+async function fetchJson(url) {
+  const win = getScrapeWindow();
+  const startedAt = Date.now();
+  log(`  → GET ${url}`);
+  // The challenge often interrupts the initial navigation with its own reload, which rejects
+  // loadURL (ERR_ABORTED) — that's expected; the poll below waits for the real JSON to land.
+  await win.loadURL(url).catch(() => {});
+  const deadline = Date.now() + REQUEST_TIMEOUT_MS;
+  let lastPreview = '';
+  while (Date.now() < deadline) {
+    const body = await win.webContents
+      .executeJavaScript('document.body ? document.body.innerText : ""', true)
+      .catch(() => '');
+    const text = (body || '').trim();
+    if (text.startsWith('{') || text.startsWith('[')) {
+      log(`  ← 200 GET ${url} (${text.length} bytes, ${Date.now() - startedAt}ms)`);
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        throw new Error(`invalid JSON from ${url}: ${e.message}`);
+      }
+    }
+    lastPreview = text.slice(0, 60).replace(/\s+/g, ' ');
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+  }
+  log(`  ✗ GET ${url} — no JSON after ${REQUEST_TIMEOUT_MS}ms (Cloudflare unsolved? last: "${lastPreview}")`);
+  throw new Error(`timed out waiting for JSON (Cloudflare?) from ${url}`);
 }
 
 /** Cargo query for one page of Unique items that carry drop_text, from a given wiki API. */
@@ -87,7 +111,7 @@ async function fetchUniquesPage(api, offset) {
     offset: String(offset),
     format: 'json',
   });
-  const json = await httpGetJson(`${api}?${params.toString()}`);
+  const json = await fetchJson(`${api}?${params.toString()}`);
   if (json.error) throw new Error(`Cargo API error: ${json.error.info || JSON.stringify(json.error)}`);
   return Array.isArray(json.cargoquery) ? json.cargoquery.map((r) => r.title) : [];
 }
