@@ -1,4 +1,4 @@
-/<#
+<#
 .SYNOPSIS
   Cleans previous build output and produces a fresh local Windows release build
   (NSIS installer + portable exe) via electron-builder.
