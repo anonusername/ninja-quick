@@ -365,14 +365,18 @@ npm test
 This repo ships a committed Claude Code setup under `.claude/` (plus `.mcp.json`). Personal/local
 config lives in `.claude/settings.local.json`, which is **not** committed.
 
-**Subagents** (`.claude/agents/*.md`) — spawn the specialist rather than doing cross-cutting work inline:
+**Subagents** — moved to the private `Internal_Agent_Instructions` repo
+(`ninja-quick/agents/*.md` there); `.claude/agents/README.md` here is a breadcrumb, not a live
+pointer — Claude Code only registers subagents from this repo's own `.claude/agents/*.md`, so these
+are **not** currently auto-discovered as Agent-tool subagent types in ninja-quick. Copy a file back
+into `.claude/agents/` if you want one live again (see the `agent-repo-sync` skill):
 - `ninja-data` — the data layer (`lib/ninja-api.js`, the endpoint map, `main.js` IPC, the JSON cache).
 - `ninja-ui` — the renderer (`renderer/*`) and the `preload.js` bridge.
 - `ninja-verify` — read-only verification (runs the tests, drives the app, reports pass/fail).
 - `api-drift-checker` — read-only; probes the live poe.ninja API against `docs/api-endpoints.md` and
   reports drift with the concrete fix (use when data comes back empty, or as a pre-release sanity check).
 
-**Skills** (`.claude/skills/*/SKILL.md`) — both workflow skills are **user-invocable only**
+**Skills** (`.claude/skills/*/SKILL.md`) — all workflow skills are **user-invocable only**
 (`disable-model-invocation: true`), since they have side effects:
 - `run-ninja-quick` — build/launch/drive the app for verification (Playwright driver; documents the
   single-instance-lock + `--user-data-dir` workaround and the `ELECTRON_RUN_AS_NODE` gotcha).
@@ -380,6 +384,8 @@ config lives in `.claude/settings.local.json`, which is **not** committed.
   (stays in the 1.1.x patch line by default; see README "Releasing").
 - `reseed-league` — start-of-league regeneration of the committed datasets (`generate-categories`,
   `discover-api`, `discover-currency-descriptions`, `discover-mechanic-drops`) + verification.
+- `agent-repo-sync` — how to re-sync `Internal_Agent_Instructions/ninja-quick/` after editing
+  CLAUDE.md/AGENTS.md locally, and how to pull a subagent file back into `.claude/agents/`.
 
 **Hooks** (`.claude/settings.json` → `.claude/hooks/*.js`, plain Node, fail-open):
 - `guard-electron` (PreToolUse/Bash) — denies Electron/`npm test`/`npm run dev`/`generate-categories`
