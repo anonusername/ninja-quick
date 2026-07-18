@@ -13,6 +13,7 @@ let currentLeague = { poe1: '', poe2: '' };     // stores the league SLUG
 // currentLeague[game] at the time it was loaded; always reload after switching leagues.
 let cachedData = {};
 let fetching = { poe1: false, poe2: false };    // track in-progress fetches
+let lastFetchError = { poe1: null, poe2: null }; // last startFetch/detectLeagues failure message per game, or null once a fetch succeeds
 let categoryRefreshing = {};     // categorySlug -> true while a per-category refresh is in flight
 let refreshIntervalMs = 12 * 60 * 60 * 1000;    // default 12 hours (user-configurable)
 let zoomFactor = 1;              // UI scale (Settings) — see applyZoomFactor
@@ -28,6 +29,7 @@ let favorites = { poe1: new Set(), poe2: new Set() };
 let alerts = { poe1: [], poe2: [] };
 let notificationsEnabled = true;
 let settingsOpen = false;
+let alertsViewOpen = false;   // the "Manage Alerts" sub-view within Settings (P2)
 let liveCategories = { poe1: [], poe2: [] }; // [{ slug, label }] — live-scraped, see loadLiveCategories
 
 // activeLeagues: [{ game, leagueSlug }] — which game+league combos the background refresh timer
@@ -1123,6 +1125,9 @@ const nextRefreshEl  = document.getElementById('next-refresh');
 const btnRefresh     = document.getElementById('btn-refresh');
 const btnSettings    = document.getElementById('btn-settings');
 const categorySidebar = document.getElementById('category-sidebar');
+const errorBanner    = document.getElementById('error-banner');
+const errorMessageEl = document.getElementById('error-message');
+const errorDismissBtn = document.getElementById('error-dismiss');
 
 // ── Category Sidebar ────────────────────────
 // Mirrors poe.ninja's own economy-page nav. Live-scraped (see lib/category-discovery.js via the
@@ -1158,6 +1163,18 @@ function buildSidebarItemRow(cat, gameData) {
     ${needsRefresh ? refreshButtonHtml(cat.slug) : ''}
   `;
   row.addEventListener('click', () => selectSidebarCategory(cat.slug));
+  // A clickable <div>, so it needs an explicit tab stop + Enter/Space activation to actually be
+  // keyboard-reachable — the .sidebar-item:focus-visible ring above is otherwise dead CSS (no
+  // native focusability to fire on). role="button" is skipped when a real <button> is nested
+  // inside (the refresh icon) to avoid invalid button-in-button ARIA nesting.
+  row.tabIndex = 0;
+  if (!needsRefresh) row.setAttribute('role', 'button');
+  row.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      selectSidebarCategory(cat.slug);
+    }
+  });
   if (needsRefresh) wireRefreshButton(row, cat.slug);
   return row;
 }
@@ -1470,6 +1487,7 @@ btnPoe2.addEventListener('click', () => switchGame('poe2'));
 function switchGame(game) {
   currentGame = game;
   settingsOpen = false;
+  alertsViewOpen = false;
   localStorage.setItem('ninja_game', game);
   applyGameSwitch(game);
   pointMechanicRefs(); // Mechanic Rewards refs follow the active game (POE1/POE2 have different maps)
@@ -1507,9 +1525,11 @@ function applyThemeColors(game) {
 }
 
 function applyGameSwitch(game) {
-  // Tabs
+  // Tabs — also manage aria-current for accessibility (P0)
   btnPoe1.classList.toggle('active', game === 'poe1');
+  btnPoe1.setAttribute('aria-current', game === 'poe1' ? 'page' : 'false');
   btnPoe2.classList.toggle('active', game === 'poe2');
+  btnPoe2.setAttribute('aria-current', game === 'poe2' ? 'page' : 'false');
 
   // Active label — always visible, zero ambiguity
   const label = game === 'poe1' ? 'POE 1' : 'POE 2';
@@ -1604,10 +1624,92 @@ leagueSelect.addEventListener('change', async () => {
 
 let searchDebounceTimer;
 
+// Clear (✕) button + search-history dropdown (P2/P3) — both anchored inside .search-input-wrap,
+// created once here (not per-render) since neither ever needs to be torn down.
+const searchInputWrap = document.querySelector('.search-input-wrap');
+
+const searchClearBtn = document.createElement('button');
+searchClearBtn.type = 'button';
+searchClearBtn.className = 'search-clear-btn';
+searchClearBtn.title = 'Clear search';
+searchClearBtn.setAttribute('aria-label', 'Clear search');
+searchClearBtn.textContent = '✕';
+searchClearBtn.style.display = 'none';
+searchClearBtn.addEventListener('click', () => {
+  searchInput.value = '';
+  searchInput.focus();
+  updateSearchClearButton();
+  hideSearchHistoryDropdown();
+  settingsOpen = false;
+  alertsViewOpen = false;
+  if (categoryScope && categoryScope !== SEARCH_ALL_SCOPE) renderResults('');
+  else showOverview();
+});
+searchInputWrap.appendChild(searchClearBtn);
+
+/** Shown only once the input actually has content — called defensively from renderResults/
+ * showOverview/clearResults too, since several flows set searchInput.value directly (clicking a
+ * category, a recent-search chip, etc.) without going through the 'input' event this also hooks. */
+function updateSearchClearButton() {
+  searchClearBtn.style.display = searchInput.value.length > 0 ? 'flex' : 'none';
+}
+
+const searchHistoryDropdown = document.createElement('div');
+searchHistoryDropdown.className = 'search-history-dropdown';
+searchHistoryDropdown.style.display = 'none';
+searchHistoryDropdown.setAttribute('role', 'listbox');
+searchHistoryDropdown.setAttribute('aria-label', 'Recent searches matching your query');
+searchInputWrap.appendChild(searchHistoryDropdown);
+
+function hideSearchHistoryDropdown() {
+  searchHistoryDropdown.style.display = 'none';
+  searchHistoryDropdown.innerHTML = '';
+}
+
+/** Recent-search chips filtered by prefix, shown while the field has focus AND content — a
+ * typeahead-style presentation of the same getRecentSearches()/pushRecentSearch() data that
+ * already backs the "Recent:" chip row on the overview (showOverview), which stays for the
+ * empty-query case this dropdown doesn't cover. */
+function updateSearchHistoryDropdown() {
+  const q = searchInput.value.trim().toLowerCase();
+  if (!q || document.activeElement !== searchInput) {
+    hideSearchHistoryDropdown();
+    return;
+  }
+  const matches = getRecentSearches().filter((r) => r.toLowerCase().startsWith(q) && r.toLowerCase() !== q);
+  if (matches.length === 0) {
+    hideSearchHistoryDropdown();
+    return;
+  }
+  searchHistoryDropdown.innerHTML = '';
+  for (const match of matches) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'search-history-item';
+    item.setAttribute('role', 'option');
+    item.textContent = match;
+    // mousedown (not click) — click fires after the input's blur, which would already have
+    // hidden this dropdown (removing the button from the DOM) before a click handler ran.
+    item.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      searchInput.value = match;
+      hideSearchHistoryDropdown();
+      updateSearchClearButton();
+      pushRecentSearch(match);
+      renderForQuery(match.toLowerCase());
+    });
+    searchHistoryDropdown.appendChild(item);
+  }
+  searchHistoryDropdown.style.display = 'block';
+}
+
 searchInput.addEventListener('input', () => {
   clearTimeout(searchDebounceTimer);
   settingsOpen = false; // typing implies the user wants to search, not configure
+  alertsViewOpen = false;
   const q = searchInput.value.trim().toLowerCase();
+  updateSearchClearButton();
+  updateSearchHistoryDropdown();
 
   if (q.length === 0) {
     if (categoryScope && categoryScope !== SEARCH_ALL_SCOPE) renderResults('');
@@ -1623,6 +1725,12 @@ searchInput.addEventListener('input', () => {
   searchDebounceTimer = setTimeout(() => {
     renderResults(q);
   }, 300);
+});
+
+searchInput.addEventListener('focus', updateSearchHistoryDropdown);
+searchInput.addEventListener('blur', hideSearchHistoryDropdown);
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') hideSearchHistoryDropdown();
 });
 
 // Keyboard navigation in results
@@ -1673,6 +1781,32 @@ function openInPoeNinjaCategory(category, itemName) {
   const url = `https://poe.ninja/${currentGame}/economy/${league}/${category}?search=${encoded}`;
   window.ninjaApi.openExternal(url);
 }
+
+// ── Global search-focus shortcut (P0) ───────
+// "/" (only when not already typing into an input/select/textarea) or Ctrl/Cmd+K jumps to the
+// search box from anywhere and selects its current text, so a follow-up query overwrites it
+// immediately — the same convention as GitHub/Slack/most search-first apps.
+document.addEventListener('keydown', (e) => {
+  const isCtrlK = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k';
+  const isSlash = e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey;
+  if (!isCtrlK && !isSlash) return;
+
+  // Never steal focus away from an open modal (showPromptModal/showConfirmModal/showAboutModal) —
+  // it visually covers the search bar, so jumping focus there would silently break typing into
+  // the modal's own input without any visible cue that focus moved.
+  if (document.querySelector('.modal-overlay')) return;
+
+  const active = document.activeElement;
+  const isTypingElsewhere = active && active !== searchInput &&
+    (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.isContentEditable);
+  // "/" is a literal character in text fields (and the modal prompt input) — only steal it when
+  // the user isn't already typing somewhere else. Ctrl/Cmd+K has no such conflict, so it always fires.
+  if (isSlash && isTypingElsewhere) return;
+
+  e.preventDefault();
+  searchInput.focus();
+  searchInput.select();
+});
 
 // ── Render Results ──────────────────────────
 
@@ -2007,6 +2141,8 @@ function renderMechanicsView(query) {
 }
 
 function renderResults(query) {
+  updateSearchClearButton();
+  hideSearchHistoryDropdown();
   // The Mechanic Rewards view is a distinct multi-select mode — every render path (search debounce,
   // empty-query branch, sidebar select) funnels through renderResults, so intercepting here is the
   // single chokepoint that keeps it showing while its scope is active.
@@ -2119,6 +2255,7 @@ function renderResults(query) {
 
 btnSettings.addEventListener('click', () => {
   settingsOpen = !settingsOpen;
+  alertsViewOpen = false; // always lands on the main settings panel, never mid-way into a sub-view
   if (settingsOpen) renderSettings();
   else renderForQuery(searchInput.value.trim().toLowerCase());
 });
@@ -2218,6 +2355,7 @@ function renderSettings() {
   title.innerHTML = `<span>Settings</span><button class="settings-close" title="Close">✕</button>`;
   title.querySelector('.settings-close').addEventListener('click', () => {
     settingsOpen = false;
+    alertsViewOpen = false;
     renderForQuery(searchInput.value.trim().toLowerCase());
   });
   box.appendChild(title);
@@ -2264,22 +2402,65 @@ function renderSettings() {
   zoomRow.appendChild(zoomSelect);
   box.appendChild(zoomRow);
 
-  // Theme — see THEMES and styles.css's :root[data-theme="..."] blocks
-  const themeRow = document.createElement('label');
-  themeRow.className = 'settings-row';
-  const themeSelect = document.createElement('select');
-  themeSelect.className = 'league-select';
+  // Theme — visual preview grid (see THEMES and styles.css's :root[data-theme="..."] blocks)
+  const themeSection = document.createElement('div');
+  themeSection.className = 'settings-row';
+  themeSection.style.justifyContent = 'flex-start';
+  themeSection.style.paddingBottom = '14px';
+
+  const themeHeading = document.createElement('span');
+  themeHeading.style.marginBottom = '8px';
+  themeHeading.textContent = 'Theme';
+  themeSection.appendChild(themeHeading);
+
+  const themeGrid = document.createElement('div');
+  themeGrid.className = 'theme-preview-grid';
+
+  // Each theme's palette — the critical colors that define its look. These values are mirrored
+  // from styles.css blocks; they power miniature swatch previews so users can tell themes apart
+  // without trying each one (Hotdog Stand is the obvious offender, but Dark Mode vs Xboxen both
+  // have dark backgrounds and you need to see the accent to tell them apart).
+  const themePalettes = {
+    ledger:     { bg: '#14100c', text: '#ede1c8', accent: '#d2643b' },
+    classic:    { bg: '#1a1d24', text: '#ffffff', accent: '#22c55e' },
+    hotdogstand:{ bg: '#ff0000', text: '#ffffff', accent: '#ffff00' },
+    darkmode:   { bg: '#121212', text: '#e8e8e8', accent: '#58a6ff' },
+    xboxentreesixty: { bg: '#313630', text: '#ffffff', accent: '#a8e01f' },
+    theduke:    { bg: '#060806', text: '#eafbe6', accent: '#39ff14' },
+    funstation256:  { bg: '#04122e', text: '#ffffff', accent: '#4aa8ff' },
+    oldfruit:   { bg: '#d9d9dc', text: '#1c1c1e', accent: '#2f5f8f' },
+    kalandra:   { bg: '#0a0a0f', text: '#e0dff0', accent: '#7b61ff' },
+  };
+
   for (const theme of THEMES) {
-    const el = document.createElement('option');
-    el.value = theme.key;
-    el.textContent = theme.label;
-    if (theme.key === currentTheme) el.selected = true;
-    themeSelect.appendChild(el);
+    const palette = themePalettes[theme.key];
+    if (!palette) continue;
+
+    // Miniature preview card — bg + text color on the "body", an accent-colored bar at top simulating a sidebar/header,
+    // and a tiny dot representing the accent. Selected themes get a glow border highlight.
+    const isSelected = theme.key === currentTheme;
+    const card = document.createElement('button');
+    card.className = 'theme-preview-card' + (isSelected ? ' selected' : '');
+    card.title = theme.label;
+
+    card.innerHTML = `
+      <div class="theme-preview-swatch" style="background:${palette.bg};color:${palette.text}">
+        <span class="theme-preview-accent"></span>
+        <span class="theme-preview-dots">
+          <span class="dot-bg" style="background:${palette.bg};border:1px solid ${palette.accent}"></span>
+          <span class="dot-text" style="background:${palette.text}"></span>
+          <span class="dot-accent" style="background:${palette.accent}"></span>
+        </span>
+      </div>
+      <span class="theme-preview-label">${escapeHtml(theme.label)}</span>
+    `;
+
+    card.addEventListener('click', () => setTheme(theme.key));
+    themeGrid.appendChild(card);
   }
-  themeSelect.addEventListener('change', () => setTheme(themeSelect.value));
-  themeRow.innerHTML = `<span>Theme</span>`;
-  themeRow.appendChild(themeSelect);
-  box.appendChild(themeRow);
+
+  themeSection.appendChild(themeGrid);
+  box.appendChild(themeSection);
 
   // Active leagues — which game+league combos the interval above actually refreshes. Listed for
   // both games regardless of currentGame, since "active" is independent of what's on screen.
@@ -2376,6 +2557,22 @@ function renderSettings() {
   debugRow.appendChild(debugCheckbox);
   box.appendChild(debugRow);
 
+  // Manage Alerts — opens a dedicated sub-view (renderAlertsView) listing every alert across
+  // both games with per-alert enable/disable + remove, plus bulk actions. "Reset price alerts"
+  // below stays as the one-click "disable everything" shortcut; this is the granular view.
+  const alertsRow = document.createElement('div');
+  alertsRow.className = 'settings-row';
+  const totalAlertCount = alerts.poe1.length + alerts.poe2.length;
+  const manageAlertsBtn = document.createElement('button');
+  manageAlertsBtn.className = 'settings-reset-btn';
+  manageAlertsBtn.textContent = `Manage Alerts (${totalAlertCount})`;
+  manageAlertsBtn.addEventListener('click', () => {
+    alertsViewOpen = true;
+    renderAlertsView();
+  });
+  alertsRow.appendChild(manageAlertsBtn);
+  box.appendChild(alertsRow);
+
   // Reset actions
   const resetHeading = document.createElement('div');
   resetHeading.className = 'settings-reset-heading';
@@ -2413,6 +2610,124 @@ function renderSettings() {
     confirmMessage: 'Reset everything — price alerts, cache, all other settings, favorites, recent searches, and theme?',
     danger: true,
   });
+
+  resultsContainer.appendChild(box);
+}
+
+/**
+ * "Manage Alerts" sub-view (Settings → Manage Alerts): every alert across BOTH games (alerts are
+ * per-game, but this mirrors the "Active leagues" section's cross-game listing convention already
+ * used in renderSettings above) with a per-alert enabled toggle + remove, and bulk actions.
+ * `enabled` (not the `armed` re-notify guard — see checkAlerts) is what "active"/"disabled" means
+ * here, matching resetPriceAlerts and the existing "Reset price alerts" settings action.
+ */
+function renderAlertsView() {
+  resultsContainer.innerHTML = '';
+
+  const box = document.createElement('div');
+  box.className = 'settings-panel';
+
+  const title = document.createElement('div');
+  title.className = 'settings-title';
+  title.innerHTML = `<span>Manage Alerts</span><button class="settings-close" title="Back to Settings" aria-label="Back to Settings">←</button>`;
+  title.querySelector('.settings-close').addEventListener('click', () => {
+    alertsViewOpen = false;
+    renderSettings();
+  });
+  box.appendChild(title);
+
+  const allAlerts = [
+    ...alerts.poe2.map((a) => ({ alert: a, game: 'poe2' })),
+    ...alerts.poe1.map((a) => ({ alert: a, game: 'poe1' })),
+  ];
+  const armedCount = allAlerts.filter(({ alert }) => alert.enabled !== false).length;
+  const disabledCount = allAlerts.length - armedCount;
+
+  const summary = document.createElement('div');
+  summary.className = 'alerts-summary';
+  summary.textContent = `Active Alerts · ${armedCount} armed, ${disabledCount} disabled`;
+  box.appendChild(summary);
+
+  if (allAlerts.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.innerHTML = `<p>No price alerts set. Click the 🔔 bell icon on any item to add one.</p>`;
+    box.appendChild(empty);
+    resultsContainer.appendChild(box);
+    return;
+  }
+
+  // Bulk actions — grouped together (not settings-row's space-between, which would push these
+  // two complementary actions to opposite far ends of the box) since they're a pair.
+  const bulkRow = document.createElement('div');
+  bulkRow.className = 'alerts-bulk-actions';
+  const disableAllBtn = document.createElement('button');
+  disableAllBtn.className = 'settings-reset-btn';
+  disableAllBtn.textContent = 'Disable all';
+  disableAllBtn.addEventListener('click', () => {
+    for (const game of ['poe1', 'poe2']) {
+      for (const a of alerts[game]) a.enabled = false;
+      saveAlerts(game);
+    }
+    renderAlertsView();
+  });
+  const enableAllBtn = document.createElement('button');
+  enableAllBtn.className = 'settings-reset-btn';
+  enableAllBtn.textContent = 'Enable all';
+  enableAllBtn.addEventListener('click', () => {
+    for (const game of ['poe1', 'poe2']) {
+      for (const a of alerts[game]) a.enabled = true;
+      saveAlerts(game);
+    }
+    renderAlertsView();
+  });
+  bulkRow.appendChild(disableAllBtn);
+  bulkRow.appendChild(enableAllBtn);
+  box.appendChild(bulkRow);
+
+  const list = document.createElement('div');
+  list.className = 'alerts-list';
+  for (const { alert, game } of allAlerts) {
+    const row = document.createElement('div');
+    row.className = 'alert-row';
+
+    const enabledCb = document.createElement('input');
+    enabledCb.type = 'checkbox';
+    enabledCb.checked = alert.enabled !== false;
+    enabledCb.title = 'Alert armed';
+    enabledCb.setAttribute('aria-label', `Alert armed for ${alert.name}`);
+    enabledCb.addEventListener('change', () => {
+      alert.enabled = enabledCb.checked;
+      saveAlerts(game);
+      renderAlertsView();
+    });
+    row.appendChild(enabledCb);
+
+    const info = document.createElement('div');
+    info.className = 'alert-info';
+    const arrow = alert.direction === 'below' ? '▼' : '▲';
+    info.innerHTML = `
+      <span class="alert-name">${escapeHtml(alert.name)}</span>
+      <span class="alert-game-tag">${game.toUpperCase()}</span>
+      <span class="alert-condition">${arrow} ${alert.direction} ${escapeHtml(String(alert.threshold))} ${escapeHtml(alert.unit || '')}</span>
+    `;
+    row.appendChild(info);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'alert-remove-btn';
+    removeBtn.textContent = '✕';
+    removeBtn.title = `Remove alert for ${alert.name}`;
+    removeBtn.setAttribute('aria-label', `Remove alert for ${alert.name}`);
+    removeBtn.addEventListener('click', () => {
+      alerts[game] = alerts[game].filter((a) => a !== alert);
+      saveAlerts(game);
+      renderAlertsView();
+    });
+    row.appendChild(removeBtn);
+
+    list.appendChild(row);
+  }
+  box.appendChild(list);
 
   resultsContainer.appendChild(box);
 }
@@ -2483,6 +2798,8 @@ function getMovers(gameData, rates) {
 // search-bar placeholder stay correct; it's renderForQuery's empty-query branch that decides to
 // show this overview instead of Search All's full merged list, not categoryScope itself.
 function showOverview() {
+  updateSearchClearButton();
+  hideSearchHistoryDropdown();
   categoryScope = SEARCH_ALL_SCOPE;
   renderCategorySidebar();
   const gameData = cachedData[currentGame] || {};
@@ -2694,6 +3011,7 @@ function renderSparkline(trend) {
 }
 
 function clearResults() {
+  updateSearchClearButton();
   resultsContainer.innerHTML = `<div class="empty-state"><p>Type something to search</p></div>`;
 }
 
@@ -2720,6 +3038,7 @@ async function detectLeagues() {
     }
   } catch (err) {
     console.error('Failed to detect POE2 leagues:', err);
+    showError(`Couldn't reach poe.ninja for POE2 leagues — ${err.message}`, 'poe2');
   }
   updateLeagueSelector(currentGame);
   if (currentGame === 'poe2') updateWindowTitle();
@@ -2740,6 +3059,7 @@ async function detectLeagues() {
     }
   } catch (err) {
     console.error('Failed to detect POE1 leagues:', err);
+    showError(`Couldn't reach poe.ninja for POE1 leagues — ${err.message}`, 'poe1');
   }
   updateLeagueSelector(currentGame);
   if (currentGame === 'poe1') updateWindowTitle();
@@ -2760,9 +3080,17 @@ async function startFetchIfEmpty(game, league) {
   }
 
   fetching[game] = true;
-  if (currentGame === game) dataStatus.textContent = `Fetching ${game.toUpperCase()}…`;
+  if (currentGame === game) {
+    dataStatus.textContent = `Fetching ${game.toUpperCase()}…`;
+    resultsContainer.setAttribute('aria-busy', 'true');
+  }
   try {
     await window.ninjaApi.startFetch(game, league);
+    lastFetchError[game] = null; // clears any previously-shown "Failed to load" for this game
+    if (game === currentGame) dismissError();
+  } catch (err) {
+    console.error(`startFetchIfEmpty(${game}/${league}) failed:`, err);
+    showError(err.message, game);
   } finally {
     fetching[game] = false;
     if (currentGame === game) updateStatus();
@@ -2780,11 +3108,19 @@ btnRefresh.addEventListener('click', () => {
   if (league) {
     fetching[game] = true;
     dataStatus.textContent = `Refreshing ${game.toUpperCase()}…`;
+    resultsContainer.setAttribute('aria-busy', 'true');
+    dismissError(); // a manual refresh is the user's own retry — clear any stale failure banner
     // Fire in background — onFetchProgress will reload cache as categories complete
-    window.ninjaApi.startFetch(game, league).finally(() => {
-      fetching[game] = false;
-      if (currentGame === game) updateStatus();
-    });
+    window.ninjaApi.startFetch(game, league)
+      .then(() => { lastFetchError[game] = null; })
+      .catch((err) => {
+        console.error(`Manual refresh(${game}/${league}) failed:`, err);
+        showError(err.message, game);
+      })
+      .finally(() => {
+        fetching[game] = false;
+        if (currentGame === game) updateStatus();
+      });
   }
 
   // Re-enable button immediately — fetch runs in background
@@ -2811,15 +3147,22 @@ function startRefreshTimer() {
     const targets = [...activeLeagues].sort((a, b) => (a.game === 'poe2' ? 0 : 1) - (b.game === 'poe2' ? 0 : 1));
     const games = [...new Set(targets.map((t) => t.game))];
 
-    for (const game of games) fetching[game] = true;
+    for (const game of games) {
+      fetching[game] = true;
+      if (currentGame === game) resultsContainer.setAttribute('aria-busy', 'true');
+    }
     try {
       for (const { game, leagueSlug } of targets) {
         await window.ninjaApi.startFetch(game, leagueSlug);
       }
     } catch (err) {
       // Don't let a rejected startFetch (e.g. a main-process error) skip the cache reload below —
-      // whatever categories DID complete before the failure should still show up.
+      // whatever categories DID complete before the failure should still show up. Existing cached
+      // data (this is a refresh, not the initial fetch) means it's not a hard failure for the
+      // user — surface it, but updateStatus() only turns it into "Failed to load" status text
+      // when there's no cached data at all, so a stale-but-valid cache stays the primary message.
       console.error('Background refresh failed:', err);
+      for (const game of games) showError(`Background refresh failed — ${err.message}`, game);
     } finally {
       for (const game of games) fetching[game] = false;
     }
@@ -2833,19 +3176,54 @@ function startRefreshTimer() {
   }, refreshIntervalMs);
 }
 
+/**
+ * Show the dismissable error banner + record the failure so updateStatus() can distinguish
+ * "Failed to load" from "No data loaded" in the status bar. `game` defaults to currentGame —
+ * background/other-game failures still record lastFetchError so switching to that game later
+ * shows the right status, but only bring up the banner itself if it's the game on screen right now.
+ */
+function showError(message, game = currentGame) {
+  lastFetchError[game] = message;
+  if (game !== currentGame) return;
+  errorMessageEl.textContent = message;
+  errorBanner.style.display = 'flex';
+}
+
+function dismissError() {
+  errorBanner.style.display = 'none';
+}
+
+errorDismissBtn.addEventListener('click', dismissError);
+
 function updateStatus() {
   const gameData = cachedData[currentGame] || {};
   const entries = categoryEntries(gameData);
   const catCount = entries.length;
   const itemCount = entries.reduce((sum, [, entry]) => sum + (entry && Array.isArray(entry.items) ? entry.items.length : 0), 0);
 
+  // aria-busy reflects whether the CURRENT game has a fetch in flight, for assistive tech. Set
+  // here (every updateStatus() call, not just at fetch-start call sites) so it self-corrects
+  // whenever status is refreshed, rather than needing every fetch call site to remember it.
+  if (fetching[currentGame]) resultsContainer.setAttribute('aria-busy', 'true');
+  else resultsContainer.removeAttribute('aria-busy');
+
   // Don't overwrite in-progress fetch messages — only update when not fetching
   if (!fetching[currentGame]) {
     if (catCount === 0) {
-      dataStatus.textContent = `Fetching ${currentGame.toUpperCase()}…`;
-      resultsContainer.innerHTML = `<div class="loading-overlay"><div class="spinner"></div>Loading data from poe.ninja…</div>`;
+      if (lastFetchError[currentGame]) {
+        // A real failure, not just "nothing fetched yet" — no spinner (nothing is happening),
+        // and the status bar names the actual problem instead of looking permanently stuck on
+        // "Fetching…" (see showError/dismissError for the accompanying banner).
+        dataStatus.textContent = `Failed to load: ${lastFetchError[currentGame]}`;
+        resultsContainer.innerHTML = `<div class="loading-overlay"><p>Couldn't load data — check your connection and try Refresh.</p></div>`;
+      } else {
+        dataStatus.textContent = 'No data loaded';
+        resultsContainer.innerHTML = `<div class="loading-overlay"><div class="spinner"></div>Loading data from poe.ninja…</div>`;
+      }
     } else {
-      dataStatus.textContent = `${catCount} categories · ${itemCount} items cached`;
+      const freshest = entries.reduce((max, [, entry]) => (entry && entry.fetchedAt > max ? entry.fetchedAt : max), 0);
+      const ageLabel = freshest ? formatCacheAge(freshest) : '';
+      dataStatus.textContent = `${ageLabel ? ageLabel + ' · ' : ''}${catCount} categories · ${itemCount} items cached`;
     }
   }
 }
@@ -2892,4 +3270,17 @@ function formatAgo(fetchedAt) {
   if (mins < 60) return `updated ${mins}m ago`;
   const hours = Math.floor(mins / 60);
   return `updated ${hours}h ago`;
+}
+
+/** "Cached Xm ago" for the top status-bar summary — sibling to formatAgo (which prefixes
+ * "updated" for per-category labels); kept separate since the two call sites want different
+ * wording, not just different data. */
+function formatCacheAge(fetchedAt) {
+  if (!fetchedAt) return '';
+  const elapsed = Date.now() - fetchedAt;
+  if (elapsed < 60_000) return 'Cached just now';
+  const mins = Math.floor(elapsed / 60_000);
+  if (mins < 60) return `Cached ${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  return `Cached ${hours}h ago`;
 }

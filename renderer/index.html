@@ -19,7 +19,7 @@
   <div class="active-label">
     <span id="active-game-text">Current: POE 2</span>
     <select id="league-select" class="league-select"></select>
-    <select id="unit-select" class="unit-select" title="Display currency">
+    <select id="unit-select" class="unit-select" title="Display currency" aria-label="Display currency unit">
       <option value="Auto">Auto</option>
       <option value="Chaos">Chaos</option>
       <option value="Divine">Divine</option>
@@ -29,19 +29,31 @@
 
   <!-- ════════ Search Field ════════ -->
   <div class="search-container">
-    <input
-      type="text"
-      id="search-input"
-      placeholder="Search items, currency, uniques…"
-      autocomplete="off"
-      spellcheck="false"
-    />
-    <button id="btn-refresh" class="refresh-btn" title="Refresh data">⟳</button>
-    <button id="btn-settings" class="refresh-btn" title="Settings">⚙</button>
+    <!-- Wrapper anchors the dynamically-created clear button + search-history dropdown
+         (renderer.js) relative to the input, without disturbing the flex layout of the
+         refresh/settings buttons beside it. -->
+    <div class="search-input-wrap">
+      <input
+        type="text"
+        id="search-input"
+        placeholder="Search items, currency, uniques…"
+        autocomplete="off"
+        spellcheck="false"
+        aria-label="Search items and currency"
+      />
+    </div>
+    <button id="btn-refresh" class="refresh-btn" title="Refresh data" aria-label="Refresh data">⟳</button>
+    <button id="btn-settings" class="refresh-btn" title="Settings" aria-label="Open settings">⚙</button>
+  </div>
+
+  <!-- Error banner (hidden by default, shown on fetch failure) -->
+  <div id="error-banner" class="error-banner" style="display:none" role="alert" aria-live="assertive">
+    <span id="error-message"></span>
+    <button id="error-dismiss" aria-label="Dismiss error">✕</button>
   </div>
 
   <!-- ════════ Status Bar ════════ -->
-  <div class="status-bar">
+  <div class="status-bar" role="status" aria-live="polite">
     <span id="data-status">No data loaded</span>
     <span id="next-refresh" class="next-refresh"></span>
   </div>
@@ -52,11 +64,11 @@
   <!-- ════════ Main Area: category sidebar + results ════════ -->
   <div class="main-area">
     <!-- Live-scraped category nav (mirrors poe.ninja's own economy-page sidebar) -->
-    <div id="category-sidebar" class="category-sidebar">
+    <nav id="category-sidebar" class="category-sidebar" aria-label="Categories">
       <!-- Dynamically populated by renderer.js -->
-    </div>
+    </nav>
 
-    <div id="results-container" class="results-container">
+    <div id="results-container" class="results-container" role="list" aria-label="Search results">
       <!-- Dynamically populated by renderer.js -->
       <div class="empty-state" id="empty-state">
         <p>Type something to search</p>

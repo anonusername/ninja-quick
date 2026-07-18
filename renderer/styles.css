@@ -511,12 +511,19 @@ body {
   gap: 8px;
 }
 
+/* Anchors the dynamically-created clear button + history dropdown (renderer.js) to the input;
+   takes over the flex:1 role #search-input itself used to have directly in .search-container. */
+.search-input-wrap {
+  position: relative;
+  flex: 1;
+}
+
 /* A "rune-slot" rather than a generic search box — inset like a carved socket, lighting up
    gold (the universal action color) rather than the per-game accent, since search itself
    isn't a POE1/POE2-specific action. */
 #search-input {
-  flex: 1;
-  padding: 10px 14px;
+  width: 100%;
+  padding: 10px 34px 10px 14px; /* right padding clears the clear button when it's shown */
   font-size: 15px;
   background: var(--bg-primary);
   border: 2px solid var(--coolgrey-700);
@@ -536,6 +543,66 @@ body {
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.45), 0 0 8px var(--gold-glow);
 }
 
+/* Clear (✕) button — only shown (via renderer.js) once the input has content. Sits inside the
+   input's own right edge, like the field owns it. */
+.search-clear-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.search-clear-btn:hover {
+  color: var(--text-primary);
+  background: var(--coolgrey-700);
+}
+
+/* Search-history dropdown (P2) — recent queries filtered by prefix, shown while the input has
+   focus + content. Positioned to hug the input's own rounded box, one layer above everything
+   else in the results area. */
+.search-history-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-primary);
+  border: 2px solid var(--coolgrey-700);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  z-index: 20;
+}
+
+.search-history-item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.search-history-item:hover,
+.search-history-item.active {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
 .refresh-btn {
   width: 36px;
   height: 36px;
@@ -551,6 +618,31 @@ body {
 .refresh-btn:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* ════════ Focus-visible rings (P0 — keyboard users need visible indicators) ════════ */
+
+/* Global focus ring for all interactive elements. `outline-offset` prevents the ring from
+   clipping against borders on tight controls like .refresh-btn or game tabs. */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Tighten the default outline on small buttons so it doesn't overlap adjacent elements. */
+.refresh-btn:focus-visible,
+.game-tab:focus-visible {
+  outline-offset: -1px;
+}
+
+/* Sidebar rows need a visible focus ring that sits *inside* the border so it doesn't shift
+   layout or overflow into the results area. (.item-row is NOT included here: its arrow-key
+   navigation toggles a `.focused` CSS class rather than real DOM focus — see the keyboard
+   navigation listener on #search-input — so it already has its own equivalent visual indicator
+   via `.item-row.focused` below; a :focus-visible rule on it would never fire.) */
+.sidebar-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 /* ════════ Status Bar ════════ */
@@ -1312,6 +1404,93 @@ mark {
   align-items: stretch;
 }
 
+/* ════════ Manage Alerts (P2) ════════ */
+
+.alerts-summary {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.alerts-bulk-actions {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--coolgrey-700);
+}
+
+.alerts-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.alert-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--coolgrey-700);
+}
+
+.alert-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.alert-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.alert-name {
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alert-game-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.alert-condition {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.alert-remove-btn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.alert-remove-btn:hover {
+  color: var(--danger);
+  background: var(--danger-glow);
+}
+
 .settings-subrow {
   display: flex;
   align-items: center;
@@ -1327,6 +1506,121 @@ mark {
   height: 15px;
   cursor: pointer;
   accent-color: var(--accent);
+}
+
+/* ════════ Theme preview grid (Settings) ════════ */
+
+.theme-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.theme-preview-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: transparent;
+  border: 2px solid var(--coolgrey-700);
+  border-radius: var(--radius);
+  padding: 0;
+  cursor: pointer;
+  transition: border-color var(--transition), box-shadow var(--transition);
+  width: 100%;
+  text-align: left;
+}
+
+.theme-preview-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 8px var(--glow);
+}
+
+.theme-preview-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--glow);
+}
+
+.theme-preview-swatch {
+  width: 100%;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  gap: 4px;
+}
+
+.theme-preview-accent {
+  width: 16px;
+  height: 3px;
+  border-radius: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 4px currentColor;
+}
+
+.theme-preview-dots {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.theme-preview-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot-bg   { opacity: 0.6; }
+.dot-text  { opacity: 1; }
+.dot-accent { opacity: 1; }
+
+.theme-preview-label {
+  font-size: 11px;
+  padding: 6px 8px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--coolgrey-700);
+  width: 100%;
+  text-align: center;
+}
+
+/* ════════ Error banner (P0/P1) ════════ */
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--danger);
+  color: var(--text-secondary);
+  font-size: 13px;
+  animation: banner-slide-down 250ms ease-out;
+}
+
+@keyframes banner-slide-down {
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+
+#error-message {
+  color: var(--danger);
+  font-weight: 500;
+}
+
+#error-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  line-height: 1;
+}
+
+#error-dismiss:hover {
+  color: var(--text-primary);
 }
 
 /* ════════ Recent searches ════════ */
