@@ -1778,7 +1778,7 @@ function openInPoeNinjaCategory(category, itemName) {
   if (!league) return;
 
   const encoded = encodeURIComponent(itemName);
-  const url = `https://poe.ninja/${currentGame}/economy/${league}/${category}?search=${encoded}`;
+  const url = `https://poe.ninja/${currentGame}/economy/${league}/${category}?name=${encoded}`;
   window.ninjaApi.openExternal(url);
 }
 
