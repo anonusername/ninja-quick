@@ -5,3 +5,6 @@ dist/
 examples/
 # Seed-script scratch output — the hand-verified data/mechanic-drops.json is the committed artifact
 data/mechanic-drops.candidate.json
+# Synced at session start by sync-private-agents.js (see agent-repo-sync skill) — never committed
+.claude/agents/*.md
+!.claude/agents/README.md

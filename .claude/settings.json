@@ -19,6 +19,21 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/load-instructions.js"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/sync-private-agents.js"
+          }
+        ]
+      }
     ]
   }
 }

@@ -365,11 +365,10 @@ npm test
 This repo ships a committed Claude Code setup under `.claude/` (plus `.mcp.json`). Personal/local
 config lives in `.claude/settings.local.json`, which is **not** committed.
 
-**Subagents** — moved to the private `Internal_Agent_Instructions` repo
-(`ninja-quick/agents/*.md` there); `.claude/agents/README.md` here is a breadcrumb, not a live
-pointer — Claude Code only registers subagents from this repo's own `.claude/agents/*.md`, so these
-are **not** currently auto-discovered as Agent-tool subagent types in ninja-quick. Copy a file back
-into `.claude/agents/` if you want one live again (see the `agent-repo-sync` skill):
+**Subagents** — canonically sourced from the private `Internal_Agent_Instructions` repo
+(`ninja-quick/agents/*.md` there), but synced into a real, working `.claude/agents/*.md` here at the
+start of every session by the `sync-private-agents` hook (see Hooks below) — gitignored, never
+committed, present locally whenever this machine has `gh` access to that private repo:
 - `ninja-data` — the data layer (`lib/ninja-api.js`, the endpoint map, `main.js` IPC, the JSON cache).
 - `ninja-ui` — the renderer (`renderer/*`) and the `preload.js` bridge.
 - `ninja-verify` — read-only verification (runs the tests, drives the app, reports pass/fail).
@@ -384,8 +383,8 @@ into `.claude/agents/` if you want one live again (see the `agent-repo-sync` ski
   (stays in the 1.1.x patch line by default; see README "Releasing").
 - `reseed-league` — start-of-league regeneration of the committed datasets (`generate-categories`,
   `discover-api`, `discover-currency-descriptions`, `discover-mechanic-drops`) + verification.
-- `agent-repo-sync` — how to re-sync `Internal_Agent_Instructions/ninja-quick/` after editing
-  CLAUDE.md/AGENTS.md locally, and how to pull a subagent file back into `.claude/agents/`.
+- `agent-repo-sync` — how the `.claude/instructions.md` / subagent sync to
+  `Internal_Agent_Instructions/ninja-quick/` works, and how to push a local edit upstream.
 
 **Hooks** (`.claude/settings.json` → `.claude/hooks/*.js`, plain Node, fail-open):
 - `guard-electron` (PreToolUse/Bash) — denies Electron/`npm test`/`npm run dev`/`generate-categories`
@@ -395,6 +394,11 @@ into `.claude/agents/` if you want one live again (see the `agent-repo-sync` ski
   script-generated / seed-then-verified files (`docs/api-endpoints.md`, `lib/categories.js`,
   `data/item-descriptions.json`, `data/mechanic-drops.json`); prefer re-running the owning script,
   the one exception being hand-verifying the mechanic-drops seed.
+- `load-instructions` (SessionStart) — injects `.claude/instructions.md` as context every session,
+  the same practical effect CLAUDE.md's native auto-injection has (see that file's own header for why
+  it isn't just named CLAUDE.md).
+- `sync-private-agents` (SessionStart) — fetches the 4 subagent files from `Internal_Agent_Instructions`
+  into `.claude/agents/` if this machine has access; silent no-op otherwise.
 
 **MCP servers**:
 - `context7` (in the committed `.mcp.json`) — live library/API docs (Electron, electron-builder,
