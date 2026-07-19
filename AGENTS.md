@@ -394,9 +394,11 @@ committed, present locally whenever this machine has `gh` access to that private
   script-generated / seed-then-verified files (`docs/api-endpoints.md`, `lib/categories.js`,
   `data/item-descriptions.json`, `data/mechanic-drops.json`); prefer re-running the owning script,
   the one exception being hand-verifying the mechanic-drops seed.
-- `load-instructions` (SessionStart) — injects `.claude/instructions.md` as context every session,
-  the same practical effect CLAUDE.md's native auto-injection has (see that file's own header for why
-  it isn't just named CLAUDE.md).
+- `load-instructions` (SessionStart) — fetches this repo's session instructions from
+  `Internal_Agent_Instructions` and injects them as context every session, the same practical effect
+  CLAUDE.md's native auto-injection has, without a file literally named CLAUDE.md **or** committed
+  here — gitignored, cached at `.claude/instructions.md`, permission-gated like the subagent sync
+  below (silent no-op without access, falling back to a stale local cache if one exists).
 - `sync-private-agents` (SessionStart) — fetches the 4 subagent files from `Internal_Agent_Instructions`
   into `.claude/agents/` if this machine has access; silent no-op otherwise.
 

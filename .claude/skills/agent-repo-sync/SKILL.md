@@ -17,32 +17,38 @@ Claude Code requires two things to be physically present at exact local paths, w
 dynamic-registration mechanism: a file literally named `CLAUDE.md` for session auto-injection (this
 repo deliberately doesn't have one — see below), and real `.claude/agents/*.md` files for subagent
 discovery (a pure filesystem scan at session start). A breadcrumb file or a copy living only in the
-private repo can't satisfy either. So instead of a static local mirror, two `SessionStart` hooks
-materialize the real content locally, fresh, every session:
+private repo can't satisfy either. Beyond that, **neither is committed to ninja-quick's own history at
+all** — not just avoiding the filename `CLAUDE.md`, but keeping this content out of the public repo's
+git history entirely (it re-entered once already, under `.claude/instructions.md`, until that got
+caught and un-committed). So instead of a static local mirror, two `SessionStart` hooks fetch the real
+content from the private repo fresh, every session, and write it to gitignored local paths:
 
-- **`.claude/hooks/load-instructions.js`** reads `.claude/instructions.md` (this repo's session
-  instructions — same content/role CLAUDE.md used to have, deliberately renamed so as not to recreate
-  a file literally named CLAUDE.md) and injects it as context via
-  `hookSpecificOutput.additionalContext`. This file **is** committed here (nothing sensitive in it).
+- **`.claude/hooks/load-instructions.js`** fetches `Internal_Agent_Instructions/ninja-quick/CLAUDE.md`
+  via `gh api`, caches it at `.claude/instructions.md` (**gitignored**, not committed), and injects it
+  as context via `hookSpecificOutput.additionalContext`. No access this session → falls back to
+  whatever's cached from a prior successful sync, if any; no cache either → silently injects nothing.
 - **`.claude/hooks/sync-private-agents.js`** fetches the 4 subagent `.md` files from
   `Internal_Agent_Instructions/ninja-quick/agents/` via `gh api` and writes them into
-  `.claude/agents/`. Those written files are **gitignored** — permission-gated by whether the current
-  machine's `gh` auth can read the private repo, so ninja-quick's own git history never holds them.
-  No access → the hook fails open, silently; those 4 subagent types just aren't available that
+  `.claude/agents/`. Those written files are **gitignored** too — permission-gated by whether the
+  current machine's `gh` auth can read the private repo, so ninja-quick's own git history never holds
+  them. No access → the hook fails open, silently; those 4 subagent types just aren't available that
   session.
 
 ## Precondition
 
 `gh auth status` must show the `repo` scope against the `anonusername` account (private-repo read
-access for `sync-private-agents.js` to work at runtime; write access for the push steps below). If a
-machine doesn't have this, the two hooks above still fail open safely — sessions just won't have the
-session-instructions context or the 4 subagents.
+access for both hooks to work at runtime; write access for the push steps below). If a machine
+doesn't have this, both hooks still fail open safely — sessions just won't have the session-instructions
+context or the 4 subagents (unless a stale local `.claude/instructions.md` cache from a prior session
+covers the gap for instructions).
 
 ## Push a local edit upstream
 
-Edited `.claude/instructions.md`, `AGENTS.md`, or a synced file in `.claude/agents/`? Push the change
-to the private repo so other machines' `sync-private-agents.js` picks it up next session. Run from the
-repo root, in the scratchpad dir (never inside ninja-quick's own working tree):
+Edited the local `.claude/instructions.md` cache, `AGENTS.md`, or a synced file in `.claude/agents/`?
+Push the change to the private repo so other machines' hooks pick it up next session — and so your own
+next `load-instructions.js`/`sync-private-agents.js` run doesn't just overwrite your edit with the old
+upstream content. Run from the repo root, in the scratchpad dir (never inside ninja-quick's own
+working tree):
 
 ```powershell
 $SCRATCH = "<scratchpad dir>\Internal_Agent_Instructions"
