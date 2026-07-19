@@ -2875,6 +2875,8 @@ function showOverview() {
 // misbehaving hotkey/macro) can't hammer poe.ninja by mashing the refresh icon — the same category
 // is capped at 2 manual refreshes per rolling hour. The category's own "updated Xm ago" timestamp
 // still reflects the underlying data's real age; this only gates the manual re-fetch action.
+// Not a user-facing setting — a release-time flag only, flip and ship to turn this on/off.
+const REFRESH_RATE_LIMIT_ENABLED = false;
 const REFRESH_RATE_LIMIT_COUNT = 2;
 const REFRESH_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 
@@ -2902,6 +2904,7 @@ function recentRefreshes(key) {
  * message (naming `label` and how long until a slot frees up) if the user has already used both
  * of their refreshes for it within the last hour. */
 function checkRefreshRateLimit(key, label) {
+  if (!REFRESH_RATE_LIMIT_ENABLED) return null;
   const history = recentRefreshes(key);
   if (history.length < REFRESH_RATE_LIMIT_COUNT) return null;
   const oldestInWindow = Math.min(...history);
@@ -2912,6 +2915,7 @@ function checkRefreshRateLimit(key, label) {
 }
 
 function recordRefresh(key) {
+  if (!REFRESH_RATE_LIMIT_ENABLED) return;
   if (!refreshHistory[key]) refreshHistory[key] = [];
   refreshHistory[key].push(Date.now());
   saveRefreshHistory();
