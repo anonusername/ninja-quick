@@ -8,8 +8,9 @@ disable-model-invocation: true
 
 `github.com/anonusername/Internal_Agent_Instructions` (private) centralizes AI-agent instructions
 across several of the user's projects, one folder each. ninja-quick's folder is `ninja-quick/` there:
-`AGENTS.md` (guard-stub + the real AGENTS.md content), `CLAUDE.md` (historical name — actually
-mirrors `.claude/instructions.md`'s content), and `agents/*.md` (the 4 subagent definitions).
+`AGENTS.md` (guard-stub + the real AGENTS.md content), `instructions.md` (mirrors
+`.claude/instructions.md`'s content — renamed from `CLAUDE.md` for consistency with the consumer
+side), and `agents/*.md` (the 4 subagent definitions).
 
 ## Why this isn't a plain file mirror
 
@@ -23,7 +24,7 @@ git history entirely (it re-entered once already, under `.claude/instructions.md
 caught and un-committed). So instead of a static local mirror, two `SessionStart` hooks fetch the real
 content from the private repo fresh, every session, and write it to gitignored local paths:
 
-- **`.claude/hooks/load-instructions.js`** fetches `Internal_Agent_Instructions/ninja-quick/CLAUDE.md`
+- **`.claude/hooks/load-instructions.js`** fetches `Internal_Agent_Instructions/ninja-quick/instructions.md`
   via `gh api`, caches it at `.claude/instructions.md` (**gitignored**, not committed), and injects it
   as context via `hookSpecificOutput.additionalContext`. No access this session → falls back to
   whatever's cached from a prior successful sync, if any; no cache either → silently injects nothing.
@@ -53,7 +54,7 @@ working tree):
 ```powershell
 $SCRATCH = "<scratchpad dir>\Internal_Agent_Instructions"
 gh repo clone anonusername/Internal_Agent_Instructions $SCRATCH
-Copy-Item .claude\instructions.md "$SCRATCH\ninja-quick\CLAUDE.md" -Force
+Copy-Item .claude\instructions.md "$SCRATCH\ninja-quick\instructions.md" -Force
 Copy-Item .claude\agents\*.md "$SCRATCH\ninja-quick\agents\" -Force
 # AGENTS.md: keep the guard-stub header (Consumer Repository + Scope Guard) intact, only replace
 # the "## Instructions" body with this repo's real AGENTS.md content — don't overwrite the header.

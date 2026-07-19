@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * SessionStart hook — fetches this repo's session instructions from the private
- * Internal_Agent_Instructions repo (ninja-quick/CLAUDE.md there) and injects them as context, the
- * same practical effect Claude Code's native CLAUDE.md auto-injection has.
+ * Internal_Agent_Instructions repo (ninja-quick/instructions.md there) and injects them as context,
+ * the same practical effect Claude Code's native CLAUDE.md auto-injection has.
  *
  * Not committed here (see .gitignore) — same permission-gated treatment as
  * sync-private-agents.js, for the same reason: keeping this content out of ninja-quick's own public
@@ -15,7 +15,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const REPO = 'anonusername/Internal_Agent_Instructions';
-const SRC_PATH = 'ninja-quick/CLAUDE.md';
+const SRC_PATH = 'ninja-quick/instructions.md';
 const CACHE_PATH = path.join(__dirname, '..', 'instructions.md');
 
 let raw = '';
