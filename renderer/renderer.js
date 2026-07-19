@@ -15,6 +15,10 @@ let cachedData = {};
 let fetching = { poe1: false, poe2: false };    // track in-progress fetches
 let lastFetchError = { poe1: null, poe2: null }; // last startFetch/detectLeagues failure message per game, or null once a fetch succeeds
 let categoryRefreshing = {};     // categorySlug -> true while a per-category refresh is in flight
+// "game|league|category" or "game|league|super:key" -> epoch-ms timestamps of past manual
+// refreshes, pruned to the trailing hour. Persisted (see loadRefreshHistory/recordRefresh) so
+// restarting the app doesn't reset the throttle. See REFRESH_RATE_LIMIT_* below.
+let refreshHistory = {};
 let refreshIntervalMs = 12 * 60 * 60 * 1000;    // default 12 hours (user-configurable)
 let zoomFactor = 1;              // UI scale (Settings) — see applyZoomFactor
 let currentTheme = 'ledger';     // 'ledger' | 'classic' — see setTheme
@@ -1074,12 +1078,12 @@ function refreshButtonHtml(category, labelOverride) {
 
 /** Sibling to wireRefreshButton for a super category's group refresh — refreshes every member
  * slug in one batched pass (refreshCategoriesNow) instead of one category. */
-function wireGroupRefreshButton(header, slugs) {
+function wireGroupRefreshButton(header, slugs, groupKey, groupLabel) {
   const btn = header.querySelector('.category-refresh');
   if (!btn) return;
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    refreshCategoriesNow(slugs, btn);
+    refreshCategoriesNow(slugs, btn, groupKey, groupLabel);
   });
 }
 
@@ -1191,7 +1195,7 @@ function buildSuperCategoryGroup(superCat, memberCats, gameData) {
     ${refreshButtonHtml(superCat.key, superCat.label)}
   `;
   header.addEventListener('click', () => selectSuperCategory(superCat.key));
-  wireGroupRefreshButton(header, memberCats.map((c) => c.slug));
+  wireGroupRefreshButton(header, memberCats.map((c) => c.slug), superCat.key, superCat.label);
   group.appendChild(header);
 
   for (const cat of memberCats) group.appendChild(buildSidebarItemRow(cat, gameData));
@@ -1372,6 +1376,7 @@ async function selectSidebarCategory(slug) {
   favBaselines.poe2 = loadFavBaselines('poe2');
   alerts.poe1 = loadAlerts('poe1');
   alerts.poe2 = loadAlerts('poe2');
+  loadRefreshHistory();
   // Mechanic Rewards: load shared view prefs + both games' maps (current game first so refs point right).
   loadMechanicViewPrefs();
   await ensureMechanicMap(currentGame);
@@ -2188,7 +2193,7 @@ function renderResults(query) {
       merged.length,
       `${refreshButtonHtml(superCat.key, superCat.label)}${sortButtonHtml()}`,
       (itemsDiv, header) => {
-        wireGroupRefreshButton(header, memberSlugs);
+        wireGroupRefreshButton(header, memberSlugs, superCat.key, superCat.label);
         wireSortButton(header, () => renderResults(query));
         merged.slice(0, limit).forEach(({ item, category }) => {
           itemsDiv.appendChild(buildItemRow(item, category, query, rates));
@@ -2323,6 +2328,7 @@ const RESETTABLE_SETTINGS = [
   () => localStorage.removeItem('ninja_recent_searches'),
   () => { localStorage.removeItem('ninja_density'); applyDensity(); },
   () => { localStorage.removeItem('ninja_columns'); applyColumns(); },
+  () => { refreshHistory = {}; localStorage.removeItem('ninja_refresh_history'); },
 ];
 
 /** `prime: false` skips the post-reset active-league refetch — used by resetAllSettings, which
@@ -2865,6 +2871,52 @@ function showOverview() {
   updateStatus(); // clears any stale status text left over from a previous search (e.g. "no exact match…")
 }
 
+// Manual per-category/per-super-category refreshes are throttled per league+game so a user (or a
+// misbehaving hotkey/macro) can't hammer poe.ninja by mashing the refresh icon — the same category
+// is capped at 2 manual refreshes per rolling hour. The category's own "updated Xm ago" timestamp
+// still reflects the underlying data's real age; this only gates the manual re-fetch action.
+const REFRESH_RATE_LIMIT_COUNT = 2;
+const REFRESH_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+
+function loadRefreshHistory() {
+  try {
+    refreshHistory = JSON.parse(localStorage.getItem('ninja_refresh_history') || '{}');
+  } catch {
+    refreshHistory = {};
+  }
+}
+
+function saveRefreshHistory() {
+  localStorage.setItem('ninja_refresh_history', JSON.stringify(refreshHistory));
+}
+
+/** Drops timestamps older than the rate-limit window and returns the surviving list for `key`. */
+function recentRefreshes(key) {
+  const cutoff = Date.now() - REFRESH_RATE_LIMIT_WINDOW_MS;
+  const pruned = (refreshHistory[key] || []).filter((ts) => ts > cutoff);
+  refreshHistory[key] = pruned;
+  return pruned;
+}
+
+/** Returns null if refreshing `key` is allowed right now, or an informative, polite denial
+ * message (naming `label` and how long until a slot frees up) if the user has already used both
+ * of their refreshes for it within the last hour. */
+function checkRefreshRateLimit(key, label) {
+  const history = recentRefreshes(key);
+  if (history.length < REFRESH_RATE_LIMIT_COUNT) return null;
+  const oldestInWindow = Math.min(...history);
+  const retryInMin = Math.max(1, Math.ceil((oldestInWindow + REFRESH_RATE_LIMIT_WINDOW_MS - Date.now()) / 60000));
+  return `You've already refreshed "${label}" twice in the last hour, so it's due for a short rest. `
+    + `Please try again in about ${retryInMin} minute${retryInMin === 1 ? '' : 's'} — this keeps poe.ninja's `
+    + `servers happy, and your existing data is still recent in the meantime. Thanks for understanding!`;
+}
+
+function recordRefresh(key) {
+  if (!refreshHistory[key]) refreshHistory[key] = [];
+  refreshHistory[key].push(Date.now());
+  saveRefreshHistory();
+}
+
 /** Refresh a single category on demand (backed by the existing fetch-category IPC, previously unused by the UI). */
 async function refreshCategoryNow(category, buttonEl) {
   if (categoryRefreshing[category]) return;
@@ -2872,9 +2924,17 @@ async function refreshCategoryNow(category, buttonEl) {
   const league = currentLeague[game];
   if (!league) return;
 
+  const rateLimitKey = `${game}|${league}|${category}`;
+  const denial = checkRefreshRateLimit(rateLimitKey, formatCategoryName(category));
+  if (denial) {
+    showRateLimitNotice(denial);
+    return;
+  }
+
   categoryRefreshing[category] = true;
   buttonEl.classList.add('spinning');
   buttonEl.disabled = true;
+  recordRefresh(rateLimitKey);
   try {
     await window.ninjaApi.fetchCategory(game, league, category);
     const freshCache = await reloadCache(game);
@@ -2891,17 +2951,26 @@ async function refreshCategoryNow(category, buttonEl) {
  * member slug in parallel, then does ONE reloadCache/checkAlerts/renderForQuery pass afterward
  * instead of one per slug (looping refreshCategoryNow N times would work but redundantly reload
  * the whole cache and re-render N times over). Slugs already mid-refresh (e.g. a per-category
- * refresh in flight) are skipped rather than double-fetched. */
-async function refreshCategoriesNow(slugs, buttonEl) {
+ * refresh in flight) are skipped rather than double-fetched. Rate-limited as ONE action keyed by
+ * `groupKey` (the super category), independent of each member category's own individual limit. */
+async function refreshCategoriesNow(slugs, buttonEl, groupKey, groupLabel) {
   const toFetch = slugs.filter((slug) => !categoryRefreshing[slug]);
   if (toFetch.length === 0) return;
   const game = currentGame;
   const league = currentLeague[game];
   if (!league) return;
 
+  const rateLimitKey = `${game}|${league}|super:${groupKey}`;
+  const denial = checkRefreshRateLimit(rateLimitKey, groupLabel);
+  if (denial) {
+    showRateLimitNotice(denial);
+    return;
+  }
+
   for (const slug of toFetch) categoryRefreshing[slug] = true;
   buttonEl.classList.add('spinning');
   buttonEl.disabled = true;
+  recordRefresh(rateLimitKey);
   try {
     await Promise.all(toFetch.map((slug) => window.ninjaApi.fetchCategory(game, league, slug)));
     const freshCache = await reloadCache(game);
@@ -3191,6 +3260,15 @@ function showError(message, game = currentGame) {
 
 function dismissError() {
   errorBanner.style.display = 'none';
+}
+
+/** Shows the same dismissable banner as showError, but for a refresh-rate-limit denial rather
+ * than a fetch failure — deliberately does NOT touch lastFetchError, since updateStatus() reads
+ * that to render "Failed to load"/"Couldn't load data" once the category has no items yet, and a
+ * throttled refresh of an already-loaded category is not a load failure. */
+function showRateLimitNotice(message) {
+  errorMessageEl.textContent = message;
+  errorBanner.style.display = 'flex';
 }
 
 errorDismissBtn.addEventListener('click', dismissError);
