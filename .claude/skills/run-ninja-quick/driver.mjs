@@ -111,6 +111,19 @@ const COMMANDS = {
     );
   },
 
+  async sswin(args) {
+    // Screenshots a secondary top-level window (e.g. the web-request debug window) by index into
+    // app.windows(), since `page` always stays pinned to the first/main window.
+    if (!app) return console.log('ERROR: launch first');
+    const [idxStr, name] = (args || '').split(/\s+/);
+    const idx = Number(idxStr || '1');
+    const wins = app.windows();
+    if (!wins[idx]) return console.log('ERROR: no window at index', idx, '- have', wins.length);
+    const f = path.join(SHOT_DIR, (name || `ss-${Date.now()}`) + '.png');
+    await wins[idx].screenshot({ path: f });
+    console.log('screenshot:', f, 'url:', wins[idx].url());
+  },
+
   async quit() {
     if (app) await app.close().catch(() => {});
     app = null;
