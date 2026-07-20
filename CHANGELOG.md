@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.6 — 2026-07-19
+
+- **Accessibility, search shortcuts, and error banner** — loading states are announced via
+  `aria-busy`, `Ctrl+K`/`/` focuses search (skipped while a modal has focus), and a dismissable error
+  banner distinguishes "no data yet" from "failed to load" from "showing cached data." Search also
+  gets a history dropdown (prefix-filtered) and a clear (×) button, sidebar category rows are fully
+  keyboard-reachable, and a saved league that's since been retired now falls back gracefully.
+- **Manage Alerts view** — a dedicated view listing every price alert across both games, with
+  per-alert arm/disarm, remove, and bulk enable/disable.
+- **Fixed item-click links** — clicking an item now actually filters to it on poe.ninja's economy
+  page (was using the wrong query parameter, so it landed on the right category but wasn't scrolled
+  to or filtered down to the specific item).
+
 ## 1.1.5 — 2026-07-17
 
 - **Item names never truncate** — the item list's name column now sizes to the longest name in the
