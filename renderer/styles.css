@@ -787,6 +787,23 @@ body {
   font-size: 14px;
 }
 
+/* Fresh-league "no economy data yet" notice — two lines, so let it grow past the 200px single-line box. */
+.empty-state-league {
+  height: auto;
+  min-height: 200px;
+  padding: 32px 24px;
+  text-align: center;
+}
+.empty-state-league > div {
+  max-width: 460px;
+}
+.empty-state-title {
+  color: var(--text-secondary);
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
 /* Category section */
 .category-section {
   border-bottom: 1px solid var(--coolgrey-700);
@@ -1607,6 +1624,15 @@ mark {
 #error-message {
   color: var(--danger);
   font-weight: 500;
+}
+
+/* Informational (non-error) use of the shared banner — the fresh-league "no economy yet" notice.
+   Gold/accent instead of red so it reads as a heads-up, not a failure. */
+.error-banner.info {
+  border-top-color: var(--gold);
+}
+.error-banner.info #error-message {
+  color: var(--gold);
 }
 
 #error-dismiss {

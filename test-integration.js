@@ -162,9 +162,28 @@ async function runTests() {
   }
 
   // ═══ Test 4: POE1 Currency Fetch ══════
-  const poe1League = poe1Leagues[0].displayName;
+  // Tests 4/5/8/9 exercise POE1's endpoint quirks (singular UniqueWeapon type, legacy value schema)
+  // and value richness against REAL data. A just-launched temp league (poe1Leagues[0]) often has no
+  // economy yet — poe.ninja publishes prices only once trading starts — so the richness assertions
+  // would fail for reasons unrelated to the client. Probe the temp league first, then fall back to
+  // the first POE1 league with a populated currency market (a permanent league like Standard always
+  // has one). The quirks are POE1-wide, not temp-league-specific, so any populated league exercises
+  // them identically. See renderer's new-league empty-economy handling for the app-side counterpart.
+  let poe1League = poe1Leagues[0].displayName;
+  let poe1Currency = await api.fetchCategory('poe1', poe1League, 'currency');
+  if (poe1Currency.length <= 20) {
+    const sparse = poe1League;
+    for (const l of poe1Leagues) {
+      const c = await api.fetchCategory('poe1', l.displayName, 'currency');
+      if (c.length > 20) { poe1League = l.displayName; poe1Currency = c; break; }
+    }
+    console.log(
+      poe1League === sparse
+        ? `  ⚠ No POE1 league has a populated currency market yet (temp league "${sparse}" is empty/sparse) — expected at league launch.`
+        : `  ℹ Temp league "${sparse}" has no economy yet; running POE1 endpoint checks against "${poe1League}" instead.`
+    );
+  }
   console.log(`\n═══ Test 4: POE1 Currency (${poe1League}) ═══`);
-  const poe1Currency = await api.fetchCategory('poe1', poe1League, 'currency');
   assert(poe1Currency.length > 20, `POE1 currency: ${poe1Currency.length} items (>20)`);
 
   const poe1WithValues = poe1Currency.filter((i) => i.value.length > 0);
@@ -186,9 +205,14 @@ async function runTests() {
   const poe1Weapons = await api.fetchCategory('poe1', poe1League, 'unique-weapons');
   assert(poe1Weapons.length > 100, `POE1 unique weapons: ${poe1Weapons.length} items (>100)`);
 
+  // Names should be plentiful and diverse (catches a degenerate constant-name response), but NOT a
+  // fixed fraction of rows: poe.ninja lists the same unique at multiple prices (links/corrupted/
+  // relic variants), and a long-lived league like Standard accumulates enough of these that distinct
+  // names run well under half the rows (e.g. 370 distinct / 766 rows). Assert a healthy absolute
+  // floor of distinct names + no over-count instead of a row-ratio.
   const uniquePoe1WeaponNames = new Set(poe1Weapons.map((i) => i.name.toLowerCase()));
   assert(
-    uniquePoe1WeaponNames.size <= poe1Weapons.length && uniquePoe1WeaponNames.size > poe1Weapons.length * 0.5,
+    uniquePoe1WeaponNames.size <= poe1Weapons.length && uniquePoe1WeaponNames.size > 100,
     `POE1 weapons: ${uniquePoe1WeaponNames.size} distinct names out of ${poe1Weapons.length} rows`
   );
 
@@ -227,7 +251,9 @@ async function runTests() {
 
   const readBack = JSON.parse(fs.readFileSync(cacheFile, 'utf-8'));
   assert(readBack.currency.length === 5, `Cache: currency count matches (got ${readBack.currency.length})`);
-  assert(readBack.weapons[0].name === poe1Weapons[0].name, 'Cache: first weapon name matches');
+  // Guard the row access: if no POE1 league had data at all (extreme launch-week case), poe1Weapons
+  // is [] — assert a clean failure rather than throwing an uncaught TypeError that aborts the suite.
+  assert(poe1Weapons.length > 0 && readBack.weapons[0].name === poe1Weapons[0].name, 'Cache: first weapon name matches');
 
   fs.unlinkSync(cacheFile);
   fs.rmSync(cacheDir, { recursive: true });

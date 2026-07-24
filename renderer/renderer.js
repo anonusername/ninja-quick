@@ -557,17 +557,35 @@ function applyDefaultActiveLeagues(poe2Leagues) {
  * league and the viewed league are independent. */
 async function primeActiveLeagues() {
   for (const { game, leagueSlug } of activeLeagues) {
+    // Each game's CURRENT league is already handled by detectLeagues → startFetchIfEmpty (which
+    // shares the same "no priced data → fetch" rule); skip it here so a fresh empty league isn't
+    // fetched twice back-to-back on startup.
+    if (currentLeague[game] === leagueSlug) continue;
     try {
       const existing = await window.ninjaApi.getCachedData(game, leagueSlug);
-      if (categoryEntries(existing).length > 0) continue;
-      await window.ninjaApi.startFetch(game, leagueSlug);
+      // Skip only if we already have actual priced data. An all-empty cache (every category key
+      // present but items:[]) is exactly what a brand-new league looks like for its first hours —
+      // poe.ninja has published no economy yet. Re-fetch those on every launch (not just once)
+      // so the moment prices go live the app picks them up, instead of skipping forever just
+      // because empty category keys exist. See leagueHasNoEconomyData / showNewLeagueNotice.
+      if (hasEconomyData(existing)) continue;
+      fetching[game] = true;
+      if (currentGame === game) resultsContainer.setAttribute('aria-busy', 'true');
+      try {
+        await window.ninjaApi.startFetch(game, leagueSlug);
+      } finally {
+        fetching[game] = false;
+      }
     } catch (err) {
+      fetching[game] = false;
+      // Record it like every other fetch site so an active-but-off-screen league's failure surfaces
+      // (as "Failed to load") when the user switches to it, instead of masquerading as an empty league.
+      showError(err.message, game);
       console.error(`primeActiveLeagues(${game}/${leagueSlug}) failed:`, err);
     }
-    if (currentGame === game && currentLeague[game] === leagueSlug) {
-      await reloadCache(game);
-      renderForQuery(searchInput.value.trim().toLowerCase());
-    }
+    // No on-screen re-render here: every league this loop still fetches is, by the skip above, an
+    // active league that is NOT the currently-viewed one — its data lands via reloadCache in the
+    // onFetchProgress handler. The viewed league is refreshed by startFetchIfEmpty.
   }
 }
 
@@ -1434,9 +1452,32 @@ async function selectSidebarCategory(slug) {
       const freshCache = await reloadCache(data.gameKey);
       checkAlerts(data.gameKey, freshCache);
 
-      // Re-render if currently viewing this game
+      // A completed full fetch for this league (current === total marks its last category) is the
+      // authoritative "done" signal. Clear the in-flight flag NOW rather than waiting for the
+      // caller's finally, which runs a tick later — after startFetch's invoke resolves, which the
+      // final progress event always beats. Without this, showOverview would keep painting skeletons
+      // for an all-empty league (fetching still true) until some later render happened to run. A
+      // run that reached its last category didn't hard-fail, so any stale load error is cleared too.
+      // Scope to the league actually being viewed (a game can track a second league in the
+      // background): otherwise a second same-game league completing would null out a real, unretried
+      // error still showing for the on-screen league, resurrecting the masked-error skeleton bug.
+      if (data.current === data.total && currentLeague[data.gameKey] === data.leagueSlug) {
+        fetching[data.gameKey] = false;
+        lastFetchError[data.gameKey] = null;
+      }
+
+      // Re-render if currently viewing this game (after the flag flip above, so the terminal state
+      // — real data or the new-league empty-state — paints instead of a lagging skeleton).
       if (currentGame === data.gameKey) {
         renderForQuery(searchInput.value.trim().toLowerCase());
+      }
+
+      // On the last category of the on-screen league's fetch, raise or retract the "new league — no
+      // economy yet" notice, so the user reads an empty view as a fresh-league state, not a stuck
+      // loader. Gated on the viewed league so a background fetch for a switched-away league is quiet.
+      if (data.current === data.total && currentGame === data.gameKey && currentLeague[data.gameKey] === data.leagueSlug) {
+        if (leagueHasNoEconomyData(freshCache, data.gameKey)) showNewLeagueNotice(data.gameKey);
+        else clearNewLeagueNotice();
       }
     } catch (err) {
       console.error('Fetch progress handler error:', err);
@@ -1500,6 +1541,7 @@ function switchGame(game) {
   updateWindowTitle();
   updateStatus();
   renderForQuery(searchInput.value.trim().toLowerCase());
+  reevaluateBanner();  // the banner is app-wide but league-specific — re-sync it to the new game
   if (liveCategories[game].length === 0) loadLiveCategories(game).catch((err) => console.error('loadLiveCategories error:', err));
   else renderCategorySidebar();
   // Guard a fast switch before the preload finished: ensure this game's map, then refresh the sidebar
@@ -1612,7 +1654,10 @@ leagueSelect.addEventListener('change', async () => {
   // already hold data from a previous session) instead of continuing to show the old league's
   // data while the new league's fetch is in flight.
   await reloadCache(game);
-  if (currentGame === game) renderForQuery(searchInput.value.trim().toLowerCase());
+  if (currentGame === game) {
+    renderForQuery(searchInput.value.trim().toLowerCase());
+    reevaluateBanner();  // drop the previous league's notice/error; re-raise for this one if apt
+  }
   loadLiveCategories(game).catch((err) => console.error('loadLiveCategories error:', err));
 
   fetching[game] = true;
@@ -2809,10 +2854,28 @@ function showOverview() {
   categoryScope = SEARCH_ALL_SCOPE;
   renderCategorySidebar();
   const gameData = cachedData[currentGame] || {};
-  const hasAnyData = categoryEntries(gameData).some(([, entry]) => entry && Array.isArray(entry.items) && entry.items.length > 0);
 
-  if (!hasAnyData) {
-    resultsContainer.innerHTML = `<div class="results-loading"><p>Fetching economy data…</p>${skeletonRows(8, 'skeleton-result')}</div>`;
+  if (!hasEconomyData(gameData)) {
+    // Distinct "nothing to show" cases — critically, don't sit on a never-resolving skeleton when
+    // the fetch has actually finished empty (a brand-new league poe.ninja hasn't priced yet).
+    // Order matters: a real fetch failure must win even when no categories are cached yet, otherwise
+    // a first-launch network error would be masked as "still loading". Fetch in flight → skeletons;
+    // load failure → connection message; nothing fetched yet → skeletons (brief pre-prime window);
+    // otherwise fetched-but-empty → the new-league notice.
+    const skeleton = `<div class="results-loading"><p>Fetching economy data…</p>${skeletonRows(8, 'skeleton-result')}</div>`;
+    if (fetching[currentGame]) {
+      resultsContainer.innerHTML = skeleton;
+    } else if (lastFetchError[currentGame]) {
+      resultsContainer.innerHTML = `<div class="empty-state"><p>Couldn't load economy data — check your connection and try Refresh.</p></div>`;
+    } else if (categoryEntries(gameData).length === 0) {
+      resultsContainer.innerHTML = skeleton;
+    } else {
+      const league = leagueDisplayName(currentGame, currentLeague[currentGame]);
+      resultsContainer.innerHTML = `<div class="empty-state empty-state-league"><div>` +
+        `<p class="empty-state-title">No economy data for ${escapeHtml(league)} yet</p>` +
+        `<p>This league just started — poe.ninja publishes prices once trading gets going. ` +
+        `The app re-checks on each launch and background refresh; use Refresh to check now.</p></div></div>`;
+    }
     return;
   }
 
@@ -3146,9 +3209,12 @@ async function startFetchIfEmpty(game, league) {
   if (!league) return;
 
   const gameData = cachedData[game] || {};
-  const catCount = categoryEntries(gameData).length;
-  if (catCount > 0) {
-    console.log(`Already have ${catCount} categories for ${game}/${league}, skipping initial fetch`);
+  // Skip only when there's already PRICED data — not merely cached category keys. A returning launch
+  // on a brand-new league has an all-empty cache (categories present, items:[]); re-fetch it so the
+  // moment poe.ninja publishes prices the app picks them up, instead of skipping forever. This is
+  // the only fetch path for the on-screen current league, so the empty-league re-fetch depends on it.
+  if (hasEconomyData(gameData)) {
+    console.log(`Already have priced data for ${game}/${league}, skipping initial fetch`);
     return;
   }
 
@@ -3258,12 +3324,72 @@ function startRefreshTimer() {
 function showError(message, game = currentGame) {
   lastFetchError[game] = message;
   if (game !== currentGame) return;
+  errorBanner.classList.remove('info');   // this is a real error — red styling, not the info variant
   errorMessageEl.textContent = message;
   errorBanner.style.display = 'flex';
 }
 
 function dismissError() {
   errorBanner.style.display = 'none';
+  newLeagueNoticeActive = false;
+}
+
+/** Display name for a league slug (from the live index-state list), falling back to the slug. */
+function leagueDisplayName(game, slug) {
+  return ((detectedLeagues[game] || []).find((l) => l.slug === slug) || {}).displayName || slug || 'this league';
+}
+
+/** True if this cache holds at least one priced row in any category (ignores the reserved __meta). */
+function hasEconomyData(gameData) {
+  return categoryEntries(gameData).some(([, e]) => e && Array.isArray(e.items) && e.items.length > 0);
+}
+
+// True while the banner is being used for the informational new-league notice (not an error), so
+// clearNewLeagueNotice can retract it once data arrives without disturbing a real error banner.
+let newLeagueNoticeActive = false;
+
+/** A refresh that produced categories but zero priced rows across all of them, with no fetch error
+ * — i.e. poe.ninja simply has no economy for this league yet (a fresh league in its first hours).
+ * Requires ALL categories empty (not just currency), so a partially-populated league — priced stash
+ * items but no currency market yet — is correctly NOT flagged. Distinct from "still fetching",
+ * "nothing fetched yet", and a genuine load failure. */
+function leagueHasNoEconomyData(gameData, game) {
+  if (categoryEntries(gameData).length === 0) return false;  // nothing fetched yet — not "empty league"
+  if (lastFetchError[game]) return false;                    // a failure, not an empty league
+  return !hasEconomyData(gameData);
+}
+
+/** Informational banner for the first hours of a brand-new league, when poe.ninja has published no
+ * economy data yet. Like showRateLimitNotice, it reuses the banner WITHOUT touching lastFetchError
+ * (an empty new league is not a load failure). Only raised for the on-screen game. */
+function showNewLeagueNotice(game) {
+  if (game !== currentGame) return;
+  const league = leagueDisplayName(game, currentLeague[game]);
+  errorBanner.classList.add('info');   // heads-up, not an error — gold styling
+  errorMessageEl.textContent = `No economy data for ${league} yet — normal right after a league launch. `
+    + `Prices appear here once trading begins; the app keeps checking automatically.`;
+  errorBanner.style.display = 'flex';
+  newLeagueNoticeActive = true;
+}
+
+/** Retract the new-league notice once the league finally has data. Guarded so it never hides a
+ * real error banner (only our own informational one). */
+function clearNewLeagueNotice() {
+  if (!newLeagueNoticeActive) return;
+  newLeagueNoticeActive = false;
+  errorBanner.style.display = 'none';
+}
+
+/** Re-sync the shared banner to the currently-viewed game+league — call after any switch that
+ * changes what's on screen (game tab, league dropdown), otherwise the banner keeps showing the
+ * PREVIOUS league's notice/error. Priority: a real fetch error wins; otherwise a confirmed-empty
+ * new league shows the info notice; otherwise the banner is cleared. */
+function reevaluateBanner() {
+  dismissError();  // resets banner + newLeagueNoticeActive; a matching state is re-raised below
+  if (lastFetchError[currentGame]) { showError(lastFetchError[currentGame], currentGame); return; }
+  if (!fetching[currentGame] && leagueHasNoEconomyData(cachedData[currentGame] || {}, currentGame)) {
+    showNewLeagueNotice(currentGame);
+  }
 }
 
 /** Shows the same dismissable banner as showError, but for a refresh-rate-limit denial rather
@@ -3271,6 +3397,7 @@ function dismissError() {
  * that to render "Failed to load"/"Couldn't load data" once the category has no items yet, and a
  * throttled refresh of an already-loaded category is not a load failure. */
 function showRateLimitNotice(message) {
+  errorBanner.classList.remove('info');
   errorMessageEl.textContent = message;
   errorBanner.style.display = 'flex';
 }
@@ -3302,6 +3429,10 @@ function updateStatus() {
         dataStatus.textContent = 'No data loaded';
         resultsContainer.innerHTML = `<div class="loading-overlay"><div class="spinner"></div>Loading data from poe.ninja…</div>`;
       }
+    } else if (itemCount === 0) {
+      // Categories fetched but nothing priced — a brand-new league poe.ninja hasn't populated yet.
+      // Say so plainly instead of "0 items cached", which reads like something broke.
+      dataStatus.textContent = `No economy data for ${leagueDisplayName(currentGame, currentLeague[currentGame])} yet — new league, prices pending`;
     } else {
       const freshest = entries.reduce((max, [, entry]) => (entry && entry.fetchedAt > max ? entry.fetchedAt : max), 0);
       const ageLabel = freshest ? formatCacheAge(freshest) : '';

@@ -1,6 +1,16 @@
 # Changelog
 
-## 1.1.6 — 2026-07-19
+## 1.1.7 — 2026-07-24
+
+- **New Path of Exile 1 league support** — the category baseline now includes the just-launched
+  league's new categories (Ducats, Enshrouding Crystals). The active league is auto-detected from
+  poe.ninja, so it's selected for you automatically.
+- **Graceful "new league, no prices yet" handling** — right after a league launches, poe.ninja has
+  no economy data to publish until trading begins. The app no longer sits on an endless loading
+  spinner in that window: it shows a clear "no economy data yet" message plus a heads-up banner, and
+  re-checks automatically on each launch and background refresh (previously an empty league could be
+  skipped indefinitely, never picking up prices once they went live). Partially-populated leagues
+  (some prices, no currency market yet) are unaffected and show their data as it arrives.
 
 - **Accessibility, search shortcuts, and error banner** — loading states are announced via
   `aria-busy`, `Ctrl+K`/`/` focuses search (skipped while a modal has focus), and a dismissable error
